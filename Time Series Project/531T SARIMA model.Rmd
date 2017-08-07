@@ -1,0 +1,110 @@
+---
+title: "531T Project"
+author: "Greg Johnson"
+date: "Friday, June 24, 2016"
+output: pdf_document
+---
+
+##Box-Jenkins
+
+Box-Jenkins was the last class of models we attempted to fit to the data. Because a vital part of specifying SARIMA models is correctly specifying the seasonal components, it's important to have stable estimates of the large-lage autocorrelations. However Box-Jenkins models with seasonal components applied to large amounts of data can take unreasonable amounts of time to compute (especially in the context of this summer class). Thus we struck a balance between the two by retaining 8 seasons (88 years) of our data.
+
+As an additional technical aside, while we explored many SARIMA models, we only report on two here again because of the lengthy computation time that these models ended up requiring. SARIMA's took anywhere from 40 minutes to two hours, so in the interest of keeping the knitting of this document under two hours, we elected to only explore two models.
+
+```{r include=FALSE}
+require(zoo)
+require(astsa)
+
+sunspots<-read.fwf("http://www.sidc.be/silso/DATA/SN_m_tot_V2.0.txt",widths=c(4,-1,2,-1,8,-2,5))
+date<-as.yearmon(paste(sunspots[,1],sunspots[,2],sep="-"))
+sunspots<-sunspots[,4]
+
+#only most recent ~12 seasons
+train<-sunspots[1698:3079]
+test<-sunspots[3080:3144]
+```
+
+###Achieving Stationarity
+
+The first step in the Box-Jenkins model-building process is achieving stationarity in the data through differencing i.e. choosing $d, D,$ and $S.$ We want to remove any slow-changing trend in the mean or any seasonal component. Just from domain knowledge we know that our data is in fact seasonal. Since it's seasonal, it's nonstationary. We can see this in the ACF and PACF plots of the data:
+
+```{r fig.height=3.5}
+plot(date[1698:3080],train,type="l")
+acf(train,lag=400) #obvious seasonality
+```
+
+Domain knowledge also tells us that there is no slow-change trend in the mean so we shouldn't have to worry about first-order differencing. We do, however, have to difference at the lag equal to the length of the season of our data. Fortunately we know from the literature that the average period is 11 years and since our data is monthly, one period consists of 132 data points. We can confirm this by looking back at the ACF plot and noticing that the period of the autocorrelation function is ~130. Theoretical and empirical evidence suggest that the $S$ in our SARIMA model should be 132. 
+
+It's important to note that our period is variable - it ranges from 9.0 to 13.7 which is a huge range. Box-Jenkins assumes a constant period so the models that we produce from the Box-Jenkins class of models will automatically suffer from lack-of-fit due to the non-constant period. 
+
+Now let's do seasonal differencing and re-evaluate the seasonality of the data.
+
+```{r fig.height=3.5}
+Sdiff<-diff(train,132)
+plot(Sdiff,type="l",main="Time-Series of one seasonal difference")
+acf(Sdiff,lag=400)
+```
+
+There appears to still be a seasonal component in the data. Our theory is that this "residual seasonality" is due to our imperfect season. If our season was perfectly 11 years, a seasonal difference would completely remove the effect. However since our seasons vary, the seasonal differencing didn't work (at least to it's fullest effect).
+
+There are two steps from here: a seasonal differencing or a differencing at lag 1. We tried both and found that the latter resulted in stationarity while the former did not. Below is the time-series plot of the seasonal-differenced, then first-order differenced training data:
+
+```{r fig.height=3.5}
+LSdiff<-diff(diff(train,132))
+plot(LSdiff,type="l",main="Time-Series of one seasonal and one regular difference")
+```
+
+There is no straightforward reason for why lag 1-differencing, something normally used to remove a linear trend in the mean, removed this "residual seasonality" but suffice to say that with a $d=1$ and $D=1,$ our data has become stationary and we can now proceed with fitting SARIMA models.
+
+###SARIMA Model Selection
+
+```{r fig.height=3.5}
+acf(LSdiff,lag=410) #lagof 410 so we can see 3 seasons and a little more
+```
+
+It looks like at the local level there's either a lag of 2 or a very steep exponential decay. At the seasonal level there's a lag of 1 and we can see some seasonal leakage around the first seasonal lag.
+
+
+```{r fig.height=3.5}
+acf(LSdiff,lag=410,type="partial")
+```
+
+At the local level, the PACF appears to show sinusoidal decay. At the seasonal level, there's an exponential decay. It could be linear but the PACF of twice-seasonal differenced data doesn't make the seasonal lags go to zero any faster.
+
+Based on our interpretations of the ACF and PACF plots, we have two basic types of models to try:
+
+1. $SARIMA(0,1,2)*(0,1,1)_{132}$ which is an $MA(2)$ at the local level and an $MA(1)$ at the seasonal level.
+2. $SARIMA(p,1,q)*(0,1,1)_{132}$ (with $p,q$ to be determined) which is an $ARMA(p,q)$ at the local level and an $MA(1)$ at the seasonal level.
+
+```{r}
+model1<-sarima(xdata=train,p=0,d=1,q=1,P=0,D=1,Q=1,S=132)
+pred1<-sarima.for(xdata=train,n.ahead=65,p=0,d=1,q=1,P=0,D=1,Q=1,S=132)
+SSpr<-sum((test-pred1$pred)^2)
+```
+
+
+
+```{r}
+model2<-sarima(xdata=train,p=1,d=1,q=1,P=0,D=1,Q=1,S=132)
+pred2<-sarima.for(xdata=train,n.ahead=65,p=1,d=1,q=1,P=0,D=1,Q=1,S=132)
+SSpr[2]<-sum((test-pred2$pred)^2)
+```
+
+```{r}
+model3<-sarima(xdata=train,p=2,d=1,q=1,P=0,D=1,Q=1,S=132)
+pred3<-sarima.for(xdata=train,n.ahead=65,p=2,d=1,q=1,P=0,D=1,Q=1,S=132)
+SSpr[3]<-sum((test-pred3$pred)^2)
+```
+
+```{r}
+model4<-sarima(xdata=train,p=1,d=1,q=2,P=0,D=1,Q=1,S=132)
+pred4<-sarima.for(xdata=train,n.ahead=65,p=1,d=1,q=2,P=0,D=1,Q=1,S=132)
+SSpr[4]<-sum((test-pred4$pred)^2)
+```
+
+```{r}
+model5<-sarima(xdata=train,p=2,d=1,q=2,P=0,D=1,Q=1,S=132)
+pred5<-sarima.for(xdata=train,n.ahead=65,p=2,d=1,q=2,P=0,D=1,Q=1,S=132)
+SSpr[5]<-sum((test-pred5$pred)^2)
+```
+
