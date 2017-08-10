@@ -5,8 +5,8 @@ Some projects/assignments from my MS Statistics program organized by class:
 2. Biostatistics
 3. [Time Series](https://github.com/lgjohnson/SchoolProjects/tree/master/Time%20Series)
 4. [Spatial Statistics](https://github.com/lgjohnson/SchoolProjects/tree/master/Spatial%20Analysis)
-5. Multivariate Statistics (& Machine Learning)
-6. Categorical Data Analysis
+5. Multivariate Statistics
+6. [Categorical Data Analysis](https://github.com/lgjohnson/SchoolProjects/tree/master/Categorical%20Data%20Analysis)
 7. Bayesian Statistics
 
 
