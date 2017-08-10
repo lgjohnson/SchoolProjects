@@ -1,0 +1,48 @@
+---
+title: "Poisson GLM of Wafer Imperfections"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+```{r tidy=TRUE}
+dat311<-data.frame(treatment=rep(c("A","B"),each=10),n_im=c(8,7,6,6,3,4,7,2,3,4,9,9,8,14,8,13,11,5,7,6))
+```
+
+Let the two treatments have counts i.i.d. as Poisson with means $\mu_A$ and $\mu_B,$ respectively. Consider the model: $\mathrm{log} \mu =\alpha +\beta x$ where x is an indicator variable for treatment B (vs. treatment A).
+
+**a)** Show that $\beta= \mathrm{log}(\mu_B/\mu_A)$ and $e^\beta = \mu_B/\mu_A.$
+
+$$\mathrm{log} \mu_B = \alpha + \beta$$
+$$\mathrm{log} \mu_A = \alpha$$
+$$\beta = \mathrm{log} \mu_B - \alpha = \mathrm{log} \mu_B - \mathrm{log} \mu_A = \mathrm{log} (\mu_B/\mu_A)$$
+$$e^\beta=e^{\mathrm{log}(\mu_B/\mu_A)} = \mu_B/\mu_A$$
+
+**b)** Fit the model. Report the prediction equation and interpret $\hat{\beta}.$
+
+```{r}
+fit311<-glm(n_im~treatment,family=poisson,data=dat311)
+```
+Our prediction equation is:
+
+$$\mathrm{log} \mu = \beta_0+\beta_1x = 1.61 + 0.59x$$
+$$\mu=e^{\beta_0+\beta_1x}=e^{\beta_0} \cdot e^{\beta_1x} = 5 \cdot 1.8^{x}$$
+
+We interpret our model as predicting an average count of 5 imperfections for treatment A and an average count of 9 imperfections for treatment B, an 80% increase, an increase by a factor of $e^{\beta_1}=1.8.$
+
+**c)** Test $H_0: \mu_A = \mu_B$ by testing $H_0: \beta_1=0.$
+
+We'll conduct a Wald test.
+
+```{r}
+par<-summary(fit311)$coefficients[2,1:2]
+pchisq((par[1]/par[2])^2,1,.05,lower.tail=FALSE)
+```
+
+$$\Big[ \frac{\hat{\beta}-\beta_0}{SE(\hat{\beta})} \Big]^2 = \Big[ \frac{0.587}{0.176} \Big]^2 = 11.1 > \chi^2 (0.05) = 3.84$$
+
+Since our $p<0.05,$ our effect of treatment is statistically significant.
+
+**d)** Construct a 95% confidence interval for $\mu_A/\mu_B.$
+
+$$\beta: (\beta \pm 1.96 \cdot SE(\beta)) = (0.24,0.93)$$
+$$\mu_B/\mu_A = e^\beta : (e^{\beta \pm 1.96 \cdot SE(\beta)})=(1.27,2.54)$$
