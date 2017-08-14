@@ -1,0 +1,225 @@
+---
+title: "MANOVA - Spectral Reflectance"
+author: "Greg Johnson"
+date: "8/14/2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 3)
+```
+
+```{r include=FALSE}
+require(ISLR) #Carseat data
+require(glmnet) #fit ridge and lasso models
+require(pls) #fit pcr model
+require(ggplot2) #for plotting
+require(reshape2)
+require(calibrate)
+require(paran) #Horn's Parallel Analysis
+require(MVN) #mvn test
+require(biotools) #Box's m test
+require(psych) #MAP test and VSS
+require(grid)
+require(gridExtra)
+```
+
+We have replicated data on the spectral reflectance of different animal species over time and over two measurements: 560nm and 720nm.
+
+```{r tidy=TRUE}
+spectral<-read.table("data/spectral_data.txt",header=FALSE,col.names=c("560nm","720nm","Species","Time","Replication"))
+p<-2
+g<-3
+n<-nrow(spectral)
+```
+
+We're interested in differences in the two reflectance variables across our three species. The analysis we'll pursue is the one-way MANOVA, to evaluate multivariate differences in reflectance between our groups.
+
+##One-Way MANOVA
+
+We want to test the research question that the three Species don't differ in their spectral reflectance, as measured at two different wavelengths, 560nm and 720nm. The corresponding statistical hypothesis is $H_0: \tau_1 = tau_2.$
+
+```{r}
+JL<-as.matrix(spectral[spectral$Species=="JL",c(1,2)])
+LP<-as.matrix(spectral[spectral$Species=="LP",c(1,2)])
+SS<-as.matrix(spectral[spectral$Species=="SS",c(1,2)])
+spect<-rbind(JL,LP,SS)
+
+xbar<-apply(spect,2,mean)
+xbarJL<-apply(JL,2,mean)
+xbarLP<-apply(LP,2,mean)
+xbarSS<-apply(SS,2,mean)
+
+B<-12*(xbarJL-xbar)%*%t(xbarJL-xbar)
+B<-B+12*(xbarLP-xbar)%*%t(xbarLP-xbar)
+B<-B+12*(xbarSS-xbar)%*%t(xbarSS-xbar)
+
+W<-matrix(0,2,2)
+Tot<-matrix(0,2,2)
+for(i in 1:36){
+  temp<-spect[i,]
+  Tot<-Tot+(temp-xbar)%*%t(temp-xbar)
+  if(i %in% 1:12){W<-W+(temp-xbarJL)%*%t(temp-xbarJL)}
+  if(i %in% 13:24){W<-W+(temp-xbarLP)%*%t(temp-xbarLP)}
+  if(i %in% 25:36){W<-W+(temp-xbarSS)%*%t(temp-xbarSS)}
+}
+```
+
+Rencher (2002) suggests that when the outcome variables are highly correlated, Roy's Largest Root is the most powerful MANOVA test statistic. The correlation between the two wavelengths is $r =0.81,$ so the Largest Root should be more powerful than Wilk's Lambda.
+
+$$\Lambda_{Roy}=max(\lambda_i)=||BW^{-1}||_{\infty}$$
+
+```{r}
+Roy<-max(eigen(B%*%solve(W))$values)
+pf((n-2-1)*Roy/2,2,n-2-1,lower.tail=FALSE)
+```
+
+Our analysis rejects the null hypothesis; the reflectance mean vector is significantly different between the three populations or in other words, at least one mean vector is different from the rest (Roy's Largest Root $=0.45,$ p-value $<.05).$
+
+Just for corroboration, we compute Wilk's Lambda:
+```{r}
+Lambda<-det(W)/det(B+W) #Wilk's Lambda
+
+pf((n-g-1)/(g-1)*(1-sqrt(Lambda))/sqrt(Lambda),2*(g-1),2*(n-g-1),lower.tail=FALSE) 
+#p-value less than alpha
+```
+Roy's Greatest Root and Wilk's Lambda agree, the three species significantly differ in spectral reflectance.
+
+##Model Evaluation
+
+To evaluate the quality of our model we analyze the residuals and our MANOVA assumptions.
+
+Recall that the MANOVA population model is:
+
+$$X_l=\mu+\tau_l+e_l$$
+
+where $e_l \sim N_p(0,\Sigma)$ for $l=1,...,g.$ To check the distributional assumption of our population model, we can check the 3 groups of residuals in our sample. 
+```{r}
+ehatJL<-JL-rep(1,12)%*%t(xbarJL)
+ehatLP<-LP-rep(1,12)%*%t(xbarLP)
+ehatSS<-SS-rep(1,12)%*%t(xbarSS)
+ehat<-rbind(ehatJL,ehatLP,ehatSS)
+
+mardiaTest(ehatJL,qqplot=TRUE)
+mardiaTest(ehatLP,qqplot=TRUE)
+mardiaTest(ehatSS,qqplot=TRUE)
+```
+
+Our groups do not follow a multivariate normal distribution. One method of solution is to apply a transformation uniformly to the three groups.
+
+```{r}
+Spec<-rep(c("JL","LP","SS"),each=12)
+manovafit_log<-manova(I(1/(spect))~Spec)
+mardiaTest(resid(manovafit_log)[1:12,],qqplot=TRUE)
+mardiaTest(resid(manovafit_log)[13:24,],qqplot=TRUE)
+mardiaTest(resid(manovafit_log)[25:36,],qqplot=TRUE)
+```
+It looks like the inverse transformation works well for our data. Although the data for our SS group aren't quite normal, it's good enough for our application.
+
+Our second assumption to check is linearity of the two spectral outcomes within each of the three groups. We can check this visually by constructing fitting linear regression lines between the DV's and assessing how well the lines fit the scatter.
+
+```{r tidy=TRUE}
+ggplot(aes(x=X560nm,y=X720nm),data=as.data.frame(1/JL))+geom_point()+geom_smooth(method="lm",se=FALSE)+labs(title="Linearity of JL Species")
+ggplot(aes(x=X560nm,y=X720nm),data=as.data.frame(1/LP))+geom_point()+geom_smooth(method="lm",se=FALSE)+labs(title="Linearity of LP Species")
+ggplot(aes(x=X560nm,y=X720nm),data=as.data.frame(1/SS))+geom_point()+geom_smooth(method="lm",se=FALSE)+labs(title="Linearity of SS Species")
+```
+Linearity within groups checks out.
+
+Our final assumption is homogeneity of variance-covariance matrices which we can check with Box's M test:
+
+```{r}
+boxM(data=1/spectral[,c(1,2)],grouping=spectral[,3])
+```
+Box's M is sensitive to non-normality and is known for being overly sensitive which is why it's recommended by some (Tabachnick & Fidell, 2001) to be evaluated at the $\alpha=0.001$ level. By this criterion, our assumption is satisfied.
+
+##Follow-up Comparisons
+
+Now that we know our species are different, we can use 95% simultaneous confidence intervals to determine exactly which mean components differ.
+
+With confidence at least 95%,
+
+$$\tau_{ki}-\tau_{li} \in \Big( \bar{x}_{ki}-\bar{x}_{li} \pm t_{36-3} \big( \frac{0.05}{2 \cdot 3 \cdot 2} \big) \sqrt{\frac{w_{ii}}{n-g} (\frac{1}{n_k}+\frac{1}{n_l}) }  \Big)$$
+
+$$\Big( \bar{x}_{1i}-\bar{x}_{2i} \pm 2.81 \sqrt{\frac{w_{ii}}{33} (\frac{1}{6}) }  \Big)$$
+
+$$\Big( \bar{x}_{1i}-\bar{x}_{3i} \pm 2.81 \sqrt{\frac{w_{ii}}{33} (\frac{1}{6}) }  \Big)$$
+
+$$\Big( \bar{x}_{2i}-\bar{x}_{3i} \pm 2.81 \sqrt{\frac{w_{ii}}{33} (\frac{1}{6}) }  \Big)$$
+
+```{r}
+xbarJL-xbarLP-2.81*sqrt(diag(W)/(33*6))
+xbarJL-xbarLP+2.81*sqrt(diag(W)/(33*6))
+
+xbarJL-xbarSS-2.81*sqrt(diag(W)/(33*6))
+xbarJL-xbarSS+2.81*sqrt(diag(W)/(33*6))
+
+xbarLP-xbarSS-2.81*sqrt(diag(W)/(33*6))
+xbarLP-xbarSS+2.81*sqrt(diag(W)/(33*6))
+```
+
+Comparing the JL and LP species:
+$$\tau_{(JL,560nm)}-\tau_{(LP,560nm)} \in (2.49,21.00)$$
+$$\tau_{(JL,720nm)}-\tau_{(LP,720nm)} \in (-1.76,32.91)$$
+
+Comparing the JL and SS species:
+$$\tau_{(JL,560nm)}-\tau_{(SS,560nm)} \in (0.76,19.27)$$
+$$\tau_{(JL,720nm)}-\tau_{(SS,720nm)} \in (-1.10,33.58)$$
+
+Comparing the LP and SS species:
+$$\tau_{(LP,560nm)}-\tau_{(SS,560nm)} \in (-10.99,7.52)$$
+$$\tau_{(LP,720nm)}-\tau_{(SS,720nm)} \in (-16.67,18.01)$$
+
+Based on our Simultaneous Testing Procedure,
+
+1. The JL and LP species differ on the 560nm spectral wavelength but not on the 720nm one.
+2. The JL and SS species also differ on the 560nm but not on 720nm.
+3. The LP and SS species do not differ on 560nm or 720nm.
+
+In sum, the species don't differ in 720nm but they don't differ in 560nm. Curiously, in 560nm, JL and LP differ from each other; JL and SS differ from each other; but LP and SS don't differ.
+
+**d)** Using the first model, compute 95% bootstrap simultaneous confidence intervals. Compare results.
+```{r}
+nboot<-10000
+xbarJLs<-matrix(NA,nboot,2)
+xbarLPs<-matrix(NA,nboot,2)
+xbarSSs<-matrix(NA,nboot,2)
+for(i in 1:nboot){
+  JL_boot<-JL[sample(1:12,replace=TRUE),]
+  LP_boot<-LP[sample(1:12,replace=TRUE),]
+  SS_boot<-SS[sample(1:12,replace=TRUE),]
+  xbarJLs[i,]<-apply(JL_boot,2,mean)
+  xbarLPs[i,]<-apply(LP_boot,2,mean)
+  xbarSSs[i,]<-apply(SS_boot,2,mean)
+}
+
+#JL vs. LP for 560
+quantile(xbarJLs[,1]-xbarLPs[,1],probs=c(.00417,1-.00417))
+#JL vs. LP for 720
+quantile(xbarJLs[,2]-xbarLPs[,2],probs=c(.00417,1-.00417))
+
+#JL vs. SS for 560
+quantile(xbarJLs[,1]-xbarSSs[,1],probs=c(.00417,1-.00417))
+#JL vs. SS for 720
+quantile(xbarJLs[,2]-xbarSSs[,2],probs=c(.00417,1-.00417))
+
+#LP vs. SS for 560
+quantile(xbarLPs[,1]-xbarSSs[,1],probs=c(.00417,1-.00417))
+#LP vs. SS for 720
+quantile(xbarLPs[,2]-xbarSSs[,2],probs=c(.00417,1-.00417))
+```
+
+Comparing the JL and LP species:
+$$\tau_{(JL,560nm)}-\tau_{(LP,560nm)} \in (2.69,22.12)$$
+$$\tau_{(JL,720nm)}-\tau_{(LP,720nm)} \in (0.40,32.03)$$
+
+Comparing the JL and SS species:
+$$\tau_{(JL,560nm)}-\tau_{(SS,560nm)} \in (1.01,20.58)$$
+$$\tau_{(JL,720nm)}-\tau_{(SS,720nm)} \in (-0.66,33.67)$$
+
+Comparing the LP and SS species:
+$$\tau_{(LP,560nm)}-\tau_{(SS,560nm)} \in (-4.67,1.09)$$
+$$\tau_{(LP,720nm)}-\tau_{(SS,720nm)} \in (-13.24,13.79)$$
+
+The bootstrapped confidence intervals are tighter but the results are mostly the same as the theoretical confidence intervals. The only exception is that now JL and LP differ significantly on 560nm *and* 720nm.
+
+

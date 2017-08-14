@@ -1,0 +1,167 @@
+---
+title: "PCA & FA of Satellite Data"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+```{r include=FALSE}
+require(ISLR) #Carseat data
+require(glmnet) #fit ridge and lasso models
+require(pls) #fit pcr model
+require(ggplot2) #for plotting
+require(reshape2)
+require(calibrate)
+require(paran) #Horn's Parallel Analysis
+require(MVN) #mvn test
+require(biotools) #Box's m test
+require(psych) #MAP test and VSS
+require(grid)
+require(gridExtra)
+require(robustfa)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 3.5)
+```
+
+
+The data are the set of 2512 pixels (with surrounding pixels completely contained in the image) that make up a $82 \times 100$ pixel sub-area of a scene. The 36 predictors are the 8-bit binary words for each pixel and its surrounding eight pixels in terms of the 4 spectral bands $(4 \times 9=36).$
+
+```{r}
+satellite<-read.table("data/landsat.txt",header=TRUE)
+```
+
+##Principal Component Analysis
+
+####PCA of $S$ Versus R
+
+PCA of unstandardized variables (i.e PCA of $\Sigma)$ is not equivalent to PCA of standardized variables (i.e. PCA of $\rho).$ In fact the principal components derived in one situation are not a simple function of those derived in the other. When there is a disparity in the scales of the variables, the variances differ those with larger variances  dominate (have larger coefficients for) the principal components.
+
+```{r tidy=TRUE}
+plot(sapply(satellite[,-37],var),pch=16,col="cornflowerblue",xlab="",
+     ylab="Variance",main="Variances of Predictors",xaxt="n")
+textxy(1:36,sapply(satellite[,-37],var),names(satellite)[-37])
+```
+
+As we can see from the above plot, the predictors from the second spectral band; those from the third band; and those from the first and second spectral bands differ greatly in their variances.
+
+We can also see this in the differences between principal component coefficients for the unstandardized variables and standardized variables:
+
+```{r}
+PC1Sloadings<-princomp(satellite[,-37],cor=FALSE)[["loadings"]][,1] #1st PC of Sigma
+PC1Rloadings<-princomp(satellite[,-37],cor=TRUE)[["loadings"]][,1] #1st PC of R
+round(cbind(PC1Sloadings,PC1Rloadings),2)
+```
+
+Notice that when applying PCA to $\Sigma,$ the large variance of predictors from the second spectral band gives them much larger coefficients than predictors from the other bands. When applying PCA to $\rho,$ the variances are standardized so the predictors from the second spectral band no longer dominate; now predictors from the first spectral band have comparably large coefficients even though they originally had smaller variances.
+
+####Perform PCA Model Selection and Interpret the Final Model
+
+Principal Component Analysis model selection essentially just comes down to finding the correct number of principal components to retain. There are a number of ways of going about this. From a theoretical standpoint, the best modern methods is Horn's Parallel Analysis (HPA). From a pragmatic standpoint, we have a lot of pixel data that we want to minimize as much as possible in the interest of database storage whilst keeping the fidelity of the original image. Thus the best criterion for the application may be the cumulative amount of variation explained. We will pursue both avenues.
+
+```{r}
+paran(satellite[,-37],quietly=TRUE,graph=TRUE)
+```
+
+HPA adjusts observed eigenvalues for random variation by generating uncorrelated data and using these "null eigenvalues" as corrections. HPA suggests retention of four principal components. 
+
+If we instead look at proportion of variance explained:
+
+```{r}
+round(eigen(cor(satellite[,-37]))$values/36,2) #prop. of var.
+round(cumsum(eigen(cor(satellite[,-37]))$values/36),2) #cum. prop. of var.
+```
+The first four eigenvalues explain 89% of the variance which is a significant portion of the original variance. If we follow the suggestion of HPA, we at least know that a significant portion of the original variance will be captured by the 4 principal component solution. By that same token, the first 2 principal components account for 80% of the data so if our goal is to preserve the original variation in the data but reduce the number of variables we need to store as much as possible, it's arguably better to store two variables with 80% fidelity than four variables with 89% fidelity.
+
+So we fit a PCA with 2 components:
+```{r}
+pcafit<-princomp(satellite[,-37],cor=TRUE)
+load<-round(eigen(cor(satellite[,-37]))$vectors[,1:2],2)
+rownames(load)<-names(satellite)[-37]
+colnames(load)<-c("PC1","PC2")
+load[abs(load)<=.1]<-0#using 0.1 as the cutoff
+```
+
+The first principal component appears to be the difference between the average of the spectrum 1 and spectrum 2 predictors, and spectrum 4 predictors. The second PC is a weighted average between the spectrum 1,3, and 4 predictors. The following heat map of loadings helps us visualize the contributions of the different spectral predictors to the two different principal components.
+
+```{r}
+ggplot(melt(load[36:1,]), aes(Var1, abs(value), fill=value)) + 
+  facet_wrap(~ Var2, nrow=1) + #place the factors in separate facets
+  geom_bar(stat="identity") + #make the bars
+  coord_flip() + #flip the axes so the test names can be horizontal  
+  #define the fill color gradient: blue=positive, red=negative
+  scale_fill_gradient2(name = "Loading", 
+                       high = "blue", mid = "white", low = "red", 
+                       midpoint=0, guide=F) +
+  ylab("Loading Strength") + #improve y-axis label
+  theme_bw(base_size=10) #use a black-and-white theme with set font size
+```
+
+####Fidelity of Two Component PCA in Terms of Classification
+
+```{r}
+pcscores<-pcafit$scores[,1:2]
+pcscores<-as.data.frame(pcscores)
+pcscores[["class"]]<-factor(satellite$class)
+names(pcscores)<-c("PC1","PC2","Class")
+ggplot(aes(x=PC1,y=PC2,col=Class),data=pcscores)+geom_point()+labs(xlab="Principal Component 1",ylab="Principal Component 2",title="Classification by First Two PC's")
+```
+
+It looks like we can retain only 2 principal components (80% of the variance in the original 36 predictors) and still get nice separation of the three classes.
+
+##Factor Analysis
+
+####Perform FA Model Selection and Interpret the Final Model
+
+Factor Analysis model selection comes down to selection of estimation method, number of factors, and rotation.
+
+**Estimation Method.** Maximum likelihood is the preferred method since it comes with goodness-of-fit indices and significance tests of loadings. However it requires multivariate normal of the common and unique factors which we test by checking the multivariate normality of our data:
+
+```{r}
+mardiaTest(satellite[,-37],qqplot=TRUE)
+```
+Our data are decidedly non-normal. So we will pursue the classic Principal Component method of Factor Analysis.
+
+**Number of Factors.** Horn's Parallel Analysis applies to Factor Analysis as well. The eigenvalues don't change between PCA and FA so HPA's recommendation stays the same: 4 factors. As with PCA, we will stick with 2 factors.
+
+**Rotation.** We will utilize a Varimax (orthogonal) rotation to attempt to achieve some sort of simple structure for interpretation purposes.
+
+```{r}
+require(robustfa)
+fafit<-factorScorePca(scale(satellite[,-37]),factors=2,rotation="varimax",scoresMethod="regression")
+load<-matrix(as.numeric(loadings(fafit)),36,2,dimnames=list(names(satellite)[-37],c("F1","F2")))
+load
+```
+
+The predictors from the first two spectra have strong positive loadings on the first factor; those from the fourth spectra have moderate negative loadings. The predictors from the third and fourth spectra have strong positive loadings on the second factor.
+
+```{r}
+ggplot(melt(load[36:1,]), aes(Var1, abs(value), fill=value)) + 
+  facet_wrap(~ Var2, nrow=1) + #place the factors in separate facets
+  geom_bar(stat="identity") + #make the bars
+  coord_flip() + #flip the axes so the test names can be horizontal  
+  #define the fill color gradient: blue=positive, red=negative
+  scale_fill_gradient2(name = "Loading", 
+                       high = "blue", mid = "white", low = "red", 
+                       midpoint=0, guide=F) +
+  ylab("Loading Strength") + #improve y-axis label
+  theme_bw(base_size=10) #use a black-and-white theme with set font size
+```
+
+####Fidelity of Two-Factor FA in Terms of Classification
+
+```{r}
+fascores<-fafit$scores[,1:2]
+fascores<-as.data.frame(fascores)
+fascores[["class"]]<-factor(satellite$class)
+names(fascores)<-c("F1","F2","Class")
+ggplot(aes(x=F1,y=F2,col=Class),data=fascores)+geom_point()+labs(xlab="Factor 1",ylab="Factor 2",title="Classification by First Two Factors")
+```
+
+The first two factor scores do a relatively clean job of separating the three classess. The second class shows a little bit of overlap with the first class but overall the classification power, visually, appears to be high.
+
+####Comparison of PCA and FA solutions
+The first principal component and factor are similar in the relative contributions from the various predictors however the signs are opposite. This is find considering the sign of the PCA solution is non-unique.  
+
+The big difference comes from the second principal component and factor - the second spectrum predictors have a strong contribution to the former, but not to the latter! This is most likely due to the non-uniqueness of the factor solution. Because of the indeterminacy of the factor solution (it's only determined up to an orthogonal rotation), we can rotate the factors however we want to satisfy what the textbook calls a "Wow" factor. In short, the discrepancy between PCA and FA for the second PC/factor is probably due to the Varimax rotation we applied to FA.
