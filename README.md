@@ -2,7 +2,7 @@
 Some projects/assignments from my **Statistics MS** program organized by class:
 
 1. **Computational Statistics**
-2. **Biostatistics**
+2. [**Biostatistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Biostats)
 3. [**Time Series**](https://github.com/lgjohnson/SchoolProjects/tree/master/Time%20Series)
 4. [**Spatial Statistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Spatial%20Analysis)
 5. **Multivariate Statistics**
