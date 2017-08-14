@@ -5,7 +5,7 @@ Some projects/assignments from my **Statistics MS** program organized by class:
 2. [**Biostatistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Biostats)
 3. [**Time Series**](https://github.com/lgjohnson/SchoolProjects/tree/master/Time%20Series)
 4. [**Spatial Statistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Spatial%20Analysis)
-5. **Multivariate Statistics**
+5. [**Multivariate Statistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Multivariate%20Statistics)
 6. [**Categorical Data Analysis**](https://github.com/lgjohnson/SchoolProjects/tree/master/Categorical%20Data%20Analysis)
 7. [**Bayesian Statistics**](https://github.com/lgjohnson/SchoolProjects/tree/master/Bayesian%20Statistics)
 
