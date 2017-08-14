@@ -12,4 +12,4 @@ Some projects/assignments from my MS Statistics program organized by class:
 
 All analyses were done in R and reported using Word, RMarkdown, or a Latex editor. Note that all of the R coding was done before I began to implement the tidyverse ecosystem in my work.
 
-Also includes an [SEM project](https://github.com/lgjohnson/SchoolProjects/tree/master/Structural%20Equation%20Modeling) from an SEM class; it is written in EQS.
+Also includes my [SEM project](https://github.com/lgjohnson/SchoolProjects/tree/master/Structural%20Equation%20Modeling) from an SEM class for psychologists; it is written in EQS.
