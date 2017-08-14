@@ -1,4 +1,4 @@
-# SchoolProjects
+# School Projects
 Some projects/assignments from my MS Statistics program organized by class:
 
 1. Computational Statistics
