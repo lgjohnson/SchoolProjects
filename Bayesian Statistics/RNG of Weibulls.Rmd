@@ -1,0 +1,79 @@
+---
+title: "RNG of Weibulls"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+
+Consider the Weibull distribution:
+
+$$f_\Theta(\theta)=\frac{\alpha}{\beta^\alpha}\theta^{\alpha-1}\exp \big( -(\theta/\beta)^\alpha \big)$$
+
+How can we generate realizations from this distribution "by hand"?
+
+Let $\alpha=2$ and $\beta=0.5.$ One method is to sample from Weibull using the *inverse CDF method*.
+
+$$F_\Theta(\theta) = \int_0^\theta f_\Theta(\theta)d\theta = \frac{\alpha}{\beta^\alpha} \int_0^\theta \theta^{\alpha-1} \exp \big( -(\theta/\beta)^\alpha \big)$$
+Formally, we would use u-substitution but it's fairly obvious what the integral is:
+
+$$F_\Theta(\theta) =\Bigg[- \exp \big( -(\theta/\beta)^\alpha \big) \Bigg]_0^\theta = 1 - \exp \big( -(\theta/\beta)^\alpha \big)$$
+Now we invert the CDF:
+
+$$p=1 - \exp \big( -(\theta/\beta)^\alpha \big)$$
+$$\log (1-p) = -(\theta/\beta)^\alpha$$
+$$F^{-1}_\Theta(p)=\beta \big[-\log (1-p) \big]^{1/\alpha}$$
+Now we apply the Inverse CDF method to sample from the Weibull with $\alpha=2$ and $\beta=0.5.$ For b samples, repeat this b times:
+
+1. $U^* \sim Unif[0,1]$
+2. $X^*=F^{-1}_\Theta(U^*)$
+
+```{r tidy=TRUE}
+#set Weibull parameters
+alpha = 2 
+beta = 0.5
+
+invWeibull = function(p){beta*(-log(1-p))^(1/alpha)}
+invWeibull = Vectorize(invWeibull)
+
+Weibull_samples = invWeibull(runif(1000))
+  
+hist(Weibull_samples,col="cornflowerblue",xlab="Reals",
+     main="Histogram of Weibulls",freq=FALSE,breaks=30)
+curve(dweibull(x,2,.5),add=TRUE,col="red",lwd=2,lty=2)
+```
+
+Now let's use *rejection sampling* to sample from the Weibull distribution with $\alpha=2$ and $\beta=0.5.$ Specifically, use the Exponential distribution with scale $\beta$ and multiplier $k=\alpha$ as the envelope.
+
+First, let's show graphically that this envelope adequately covers the Weibull distribution for all $\theta.$
+```{r tidy=TRUE}
+curve(dweibull(x,2,.5),col="cornflowerblue",from=0,to=1.1,lwd=2,xlab="X",ylab="Density",main="Rejection Sampling Densities")
+curve(2.05*dexp(x,2),add=TRUE,lwd=2,col="red",lty=2)
+legend("topright",legend=c("Weibull","Envelope"),lwd=2,lty=c(1,2),col=c("cornflowerblue","red"))
+```
+
+Great! Now we can proceed with the Rejection Sampling algorithm:
+
+1. Sample $\theta^* \sim Exp(\beta)$
+2. Sample $u^* \sim U[0,1]$
+3. If $u^*<\frac{f(\theta^*)}{G(\theta^*)}$ then keep $\theta^*.$ Otherwise reject it.
+
+```{r tidy=TRUE}
+alpha = 2
+beta = .5
+B = 1000
+
+weibull_samples_RS = numeric()
+
+for(b in 1:B){
+  theta = rexp(1,2)
+  u = runif(1)
+  if(u<dweibull(theta,2,.5)/(2.01*dexp(theta,2))){
+    weibull_samples_RS = c(weibull_samples_RS,theta)
+  }
+}
+
+hist(weibull_samples_RS,col="cornflowerblue",xlab="Reals",
+     main="Histogram of Weibulls",freq=FALSE,breaks=30)
+curve(dweibull(x,2,.5),add=TRUE,col="red",lwd=2,lty=2)
+```
+
