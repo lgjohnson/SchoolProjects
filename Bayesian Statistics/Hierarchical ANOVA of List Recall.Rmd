@@ -1,0 +1,352 @@
+---
+title: "Hierarchical ANOVA of List Recall"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+
+A psychology experiment on the latency of list recall produces the following data: time-to-recall for 4 different lists, for 24 different subjects. We wish to assess whether the 4 lists have similar levels of difficulty, as operationalized by recall time.
+
+Consider a two-way ANOVA with a normal likelihood where the mean is determined by a subject effect $\theta_h$ and list effect $\phi_j.$ The hierarchical model with conjugate priors is given by:
+
+$$y_{hj} | \theta_h, \phi_j, \sigma^2 \sim N(\theta_h+ \phi_j,\sigma^2)$$
+$$\theta_h |\mu,\sigma^2 \sim N(\mu,\sigma^2)$$
+$$\phi_j | \sigma^2 \sim N(0,\sigma^2/4)$$
+$$\mu|\sigma^2 \sim N(30,\sigma^2/9)$$
+$$\sigma^2\sim\Gamma^{-1}(1,1)$$
+
+Where $h=1,...,n$ and $j=1,...,k.$
+
+Our full joint likelihood $f(\textbf{y}|\boldsymbol{\theta,\phi},\sigma^2)$ is:
+
+$$L(\boldsymbol{\theta,\phi},\sigma^2)=f(\textbf{y}|\boldsymbol{\theta,\phi},\sigma^2)=\prod_{h=1}^n  \prod_{j=1}^k f(\textbf{y}_{hj}|\theta_h,\phi_j,\sigma^2)=\prod_{h=1}^n  \prod_{j=1}^k N(\theta_h + \phi_j,\sigma^2)$$
+$$L(\boldsymbol{\theta,\phi},\sigma^2) \propto (\sigma^2)^{-nk} \exp \bigg\{ -\frac{1}{2\sigma^2} \Big(y_{hj}-(\theta_h + \phi_j) \Big)^2 \bigg\}$$
+
+##Posteriors
+
+Next we derive the full posterior conditional distribution for $\theta_h.$
+
+Let $h=1,...,n.$
+
+$$p(\theta_h|\boldsymbol{\theta}_{-h},\boldsymbol{\phi},\mu,\sigma^2,\textbf{y})$$
+First we need to derive the full posterior.
+
+$$p(\mu,\sigma^2,\boldsymbol{\theta,\phi}|\textbf{y}) \propto p(\mu,\sigma^2,\boldsymbol{\theta,\phi})L(\mu,\sigma^2,\boldsymbol{\theta,\phi})$$
+
+$$p(\mu,\sigma^2,\boldsymbol{\theta,\phi})=p(\sigma^2)p(\mu|\sigma^2)p(\boldsymbol{\phi}|\sigma^2)p(\boldsymbol{\theta}|\mu,\sigma^2)=p(\sigma^2)p(\mu|\sigma^2)\prod_{j=1}^k p(\phi_j|\sigma^2)\prod_{h=1}^n p(\theta_h|\mu,\sigma^2)$$
+
+$$=\Gamma^{-1}(1,1)\mathrm{N}(30,\sigma^2/9)\prod_{j=1}^k \mathrm{N}(0,\sigma^2/4) \prod_{h=1}^n \mathrm{N}(\mu,\sigma^2)$$
+
+So our unnormalized full posterior is:
+
+$$p(\mu,\sigma^2,\boldsymbol{\theta,\phi}|\textbf{y}) \propto \Gamma^{-1}(1,1)\mathrm{N}(30,\sigma^2/9)\prod_{j=1}^k \mathrm{N}(0,\sigma^2/4) \prod_{h=1}^n \mathrm{N}(\mu,\sigma^2)\prod_{h=1}^n  \prod_{j=1}^k N(\theta_h + \phi_j,\sigma^2)$$ 
+
+Now if we want to focus on the posteriors for the parameters $\boldsymbol{\theta}$ and $\boldsymbol{\phi}$ then we need to isolate terms that involve those parameters and try to find the parameters of their normal posteriors (thanks to conjugacy). First we will derive the conditional posterior for the subject effect, $\theta_h.$
+
+For some $h$ in $1,...,n:$
+
+$$p(\theta_h|\boldsymbol{\theta}_{-h},\boldsymbol{\phi},\mu,\sigma^2) \propto \exp \bigg\{ -\frac{1}{2\sigma^2} (\theta_h-\mu)^2 \bigg\} \exp \bigg\{ -\frac{1}{2\sigma^2} \sum_{j=1}^k \Big(y_{hj}-(\theta_h+\phi_j)\Big)^2 \bigg\}$$
+
+A little bit of algebra is needed to expand the second exponential term.
+$$\sum_{j=1}^k \Big(y_{hj}-(\theta_h+\phi_j)\Big)^2 = \sum_{j=1}^k \Big( y_{hj}^2 - 2(\theta_h+\phi_j)y_{hj} + (\theta_h+\phi_j)^2 \Big)$$
+$$=\sum_{j=1}^k(y_{hj}^2-2\theta_h y_{hj}-2\phi_j y_{hj}+\theta_h^2+2\theta_h\phi_j+\phi_j^2)=\sum_{j=1}^k y_{hj}^2 - 2\theta_h \sum_{j=1}^ky_{hj} -2\sum_{j=1}^k \phi_j y_{hj} + k\theta_h^2+2\theta_h \sum_{j=1}^k \phi_j + \sum_{j=1}^k\phi_j^2$$
+
+We only need the terms related to $\theta_h$ for the conditional posterior.
+
+$$p(\theta_h|\boldsymbol{\theta}_{-h},\boldsymbol{\phi},\mu,\sigma^2) \propto  \exp \bigg\{ -\frac{1}{2\sigma^2} \Big( \theta_h^2 -2\mu\theta_h  -2\theta_h \sum_{i=1}^k y_{hj} + k\theta_h^2 + 2\theta_h \sum_{j=1}^k \phi_j \Big)  \bigg\}$$
+$$\propto \exp \bigg\{ -\frac{1}{2\sigma^2} \Big( (k+1)\theta_h^2 -2\big( \mu + \sum_{i-1}^ky_{hj} - \sum_{j=1}^k \phi_j \big)\theta_h \Big)  \bigg\}$$
+$$\propto \exp \Bigg\{ - \frac{1}{2 \sigma^2/(k+1)} \bigg( \theta_h^2 - 2 \Big( \frac{1}{k+1}(\mu + \sum_{i-1}^ky_{hj} - \sum_{j=1}^k \phi_j)\Big)\theta_h \bigg) \Bigg\}$$
+After completing the square:
+$$\propto \exp \Bigg\{ - \frac{1}{2 \sigma^2/(k+1)} \bigg( \theta_h - \frac{1}{k+1}(\mu + \sum_{j=1}^ky_{hj} - \sum_{j=1}^k \phi_j) \bigg)^2 \Bigg\}$$
+From which we recognize a normal kernel:
+
+$$\theta_h|\boldsymbol{\theta}_{-h},\boldsymbol{\phi},\mu,\sigma^2,\textbf{y} \sim \mathrm{N} \Bigg(\frac{\mu + \sum_{i-1}^ky_{hj} - \sum_{j=1}^k \phi_j}{k+1}, \frac{\sigma^2}{k+1} \Bigg)$$
+
+Now we want to derive the posterior for the list effect.
+
+Let $j=1,...,k.$
+
+$$p(\phi_j|\boldsymbol{\phi}_{-j},\boldsymbol{\theta},\mu,\sigma^2,\textbf{y}) \propto \exp \bigg\{-\frac{1}{2\sigma^2/4} \phi_j^2 \bigg\} \exp \bigg\{ -\frac{1}{2\sigma^2} \sum_{h=1}^n \Big( y_{hj} - (\theta_h+\phi_j) \Big)^2 \bigg\}$$
+
+Again we expand the second term, keeping only the resulting terms that contain $\phi_j.$
+
+$$\sum_{h=1}^n(y_{hj}^2-2\theta_h y_{hj}-2\phi_j y_{hj}+\theta_h^2+2\theta_h\phi_j+\phi_j^2) \propto -2\phi_j \sum_{h=1}^n y_{hj} + 2\phi_j \sum_{h=1}^n \theta_h + n\phi_j^2$$
+
+$$\propto \exp \bigg\{ - \frac{1}{2\sigma^2} \Big( (4 + n)\phi_j^2  -2( \sum_{h=1}^n y_{hj} - \sum_{h=1}^n \theta_h) \phi_j \Big) \bigg\} = \exp \bigg\{ -\frac{1}{2\sigma^2/(n+4)} \bigg( \phi_j^2-2 \Big(\frac{1}{n+4} \Big)\Big( \sum_{h=1}^n y_{hj}-\sum_{h=1}^n \theta_h \Big) \phi_j \bigg) \bigg\}$$
+
+Completing the square:
+
+$$\propto \exp \bigg\{ -\frac{1}{2\sigma^2/(n+4)} \bigg( \phi_j - \frac{\sum_{h=1}^n y_{hj}-\sum_{h=1}^n\theta_h}{n+4}  \bigg)^2 \bigg\}$$
+
+Revealing a normal kernel:
+
+$$\phi_j|\boldsymbol{\phi}_{-j},\boldsymbol{\theta},\mu,\sigma^2,\textbf{y} \sim \mathrm{N} \Bigg(\frac{\sum_{h=1}^n y_{hj}-\sum_{h=1}^n\theta_h}{n+4}, \frac{\sigma^2}{n+4} \Bigg)$$
+
+##Posteriors for Hyperparameters
+
+####Hyperposterior of $\mu$
+
+$$p(\mu|\boldsymbol{\phi},\boldsymbol{\theta},\sigma^2,\textbf{y}) \propto \mathrm{N}(30,\sigma^2/9)\prod_{h=1}^n \mathrm{N} (\mu,\sigma^2)\propto \exp \bigg\{-\frac{1}{2\sigma^2/9} (\mu-30)^2 \bigg\} \exp \bigg\{ -\frac{1}{2\sigma^2} \sum_{h=1}^n ( \theta_h-\mu )^2 \bigg\}$$
+$$\propto \exp \bigg\{ -\frac{1}{2\sigma^2} \Big(9\mu^2-540\mu-2\mu\sum_{h=1}^n\theta_h + n\mu^2\Big) \bigg\} = \exp \bigg\{ -\frac{1}{2\sigma^2} \Big((n+9)\mu^2 - 2(540+\sum_{h=1}^n\theta_h)\mu\Big) \bigg\}$$
+$$\propto \exp \bigg\{ -\frac{1}{2\sigma^2/(n+9)} \Big(\mu^2 - 2\Big(\frac{1}{n+9} \Big)\Big(540+\sum_{h=1}^n\theta_h\Big)\mu\Big) \bigg\}$$
+
+Completing the square:
+
+$$\propto \exp \bigg\{ -\frac{1}{2\sigma^2/(n+9)} \bigg(\mu- \frac{540+\sum_{h=1}^n \theta_h}{n+9}\bigg)^2 \bigg\}$$
+
+Revealing:
+
+$$\mu|\boldsymbol{\theta,\phi},\sigma^2,\textbf{y} \sim \mathrm{N} \Bigg(\frac{540+\sum_{h=1}^n\theta_h}{n+9}, \frac{\sigma^2}{n+9} \Bigg)$$
+
+####Hyperposterior of $\sigma^2$
+
+$$p(\sigma^2|\boldsymbol{\phi},\boldsymbol{\theta},\mu,\textbf{y}) \propto \Gamma^{-1}(1,1)\mathrm{N}(30,\sigma^2/9)\prod_{j=1}^k \mathrm{N}(0,\sigma^2/4) \prod_{h=1}^n \mathrm{N}(\mu,\sigma^2)\prod_{h=1}^n  \prod_{j=1}^k N(\theta_h + \phi_j,\sigma^2)$$
+$$\propto \bigg[ \exp \Big(-\frac{1}{\sigma^2}\Big)  \bigg]\bigg[ (\sigma^2)^{-(1/2)} \exp \Big( - \frac{9}{2\sigma^2}A \Big)  \bigg]\bigg[ (\sigma^2)^{-k(1/2)} \exp \Big( -\frac{4}{2\sigma^2} B \Big)  \bigg]\bigg[ (\sigma^2)^{-n(1/2)} \exp \Big( - \frac{1}{2\sigma^2} C \Big)  \bigg]$$
+
+$$\times \bigg[ (\sigma^2)^{-nk(1/2)} \exp \Big( -\frac{1}{2\sigma^2} D \Big)  \bigg]$$
+
+$$\propto (\sigma^2)^{-\frac{1}{2}(n+k+nk+1)} \exp \Big( -(\sigma^2)^{-1}\Big[1+\frac{9}{2}A +\frac{4}{2}B+\frac{1}{2}C+\frac{1}{2}D \Big] \Big)$$
+
+From which we recognize the inverse gamma distribution:
+
+$$\sigma^2|\boldsymbol{\phi},\boldsymbol{\theta},\mu,\textbf{y}\sim \Gamma^{-1}\Big(\frac{1}{2}(n+k+nk-1),1+\frac{9}{2}A +\frac{4}{2}B+\frac{1}{2}C+\frac{1}{2}D\Big)$$
+$$A=(\mu-30)^2$$
+$$B=\sum_{j=1}^k \phi_j^2$$
+$$C=\sum_{h=1}^n (\theta_h-\mu)^2$$
+$$D=\sum_{h=1}^n\sum_{j=1}^k \Big(y_{hj}-(\theta_h+\phi_j)\Big)^2$$
+
+Phew! Thank god for conjugate models.
+
+##Fit the Hierarchical ANOVA
+
+
+####Formulating MCMC
+
+Given all of the nice conditional posteriors we have derived, Gibbs seems to be the way to go. We will proceed as follows:
+
+For iterations $1,...,t,...T$
+
+1. Sample hyperparameter $(\sigma^2)^t|\boldsymbol{\phi}^{t-1},\boldsymbol{\theta}^{t-1},\mu^{t-1},\textbf{y}\sim \Gamma^{-1}$
+
+2. Sample hyperparameter $\mu^t|(\sigma^2)^t\boldsymbol{\phi}^{t-1},\boldsymbol{\theta}^{t-1},\mu^{t-1},\textbf{y}\sim \mathrm{N}$
+
+3. Independently sample $n$ parameters $\theta_h^t|(\sigma^2)^t, \mu^t,\boldsymbol{\phi}^{t-1},\textbf{y}\sim \mathrm{N}$
+
+4. Independently sample $k$ parameters $\phi_j^t|(\sigma^2)^t, \mu^t,\boldsymbol{\theta}^t,\textbf{y}\sim \mathrm{N}$
+
+####Sample from Posterior
+```{r include=FALSE}
+require(invgamma)
+```
+
+
+```{r}
+#hearing data
+Y = structure(c(28L, 24L, 32L, 30L, 34L, 30L, 36L, 32L, 48L, 32L, 
+32L, 38L, 32L, 40L, 28L, 48L, 34L, 28L, 40L, 18L, 20L, 26L, 36L, 
+40L, 20L, 16L, 38L, 20L, 34L, 30L, 30L, 28L, 42L, 36L, 32L, 36L, 
+28L, 38L, 36L, 28L, 34L, 16L, 34L, 22L, 20L, 30L, 20L, 44L, 24L, 
+32L, 20L, 14L, 32L, 22L, 20L, 26L, 26L, 38L, 30L, 16L, 36L, 32L, 
+38L, 14L, 26L, 14L, 38L, 20L, 14L, 18L, 22L, 34L, 26L, 24L, 22L, 
+18L, 24L, 30L, 22L, 28L, 30L, 16L, 18L, 34L, 32L, 34L, 32L, 18L, 
+20L, 20L, 40L, 26L, 14L, 14L, 30L, 42L), .Dim = c(24L, 4L), .Dimnames = list(
+    NULL, c("List.1", "List.2", "List.3", "List.4")))
+n = nrow(Y)
+k = ncol(Y)
+
+GibbsANOVA = function(Y,start,ndraws){
+  n = nrow(Y)
+  k = ncol(Y)
+ 
+  #set-up list to collect draws  
+  post_draws = list(
+    "Sigma Squared" = numeric(ndraws),
+    "Mu" = numeric(ndraws),
+    "Theta" = matrix(0,ndraws,n,dimnames=list(NULL,paste("Theta",1:n))),
+    "Phi" = matrix(0,ndraws,k,dimnames=list(NULL,paste("List",1:k)))
+  )
+  
+  #starting values
+  mu = start[["mu"]]
+  theta = start[["theta"]]
+  phi = start[["phi"]]
+  
+  for(g in 1:ndraws){
+    #sample sigma squared
+    Dmat=matrix(NA,n,k) #create D term
+    for(h in 1:n){
+      for(j in 1:k){
+        Dmat[h,j] = (Y[h,j]-(theta[h]+phi[j]))^2
+      }
+    }
+    D=sum(Dmat)
+    sig2 = rinvgamma(1,
+                     shape = .5*(n+k+n*k-1), 
+                     rate = 1 + 9/2*(mu-30)^2 + 4/2*sum(phi^2) + 1/2*sum((theta-mu)^2) + 1/2*D
+                     )
+    #sample mu
+    mu = rnorm(1,
+               mean = (540+sum(theta))/(n+9),
+               sd = sqrt( sig2/(n+9) )
+               )
+    #sample theta vector
+    for(h in 1:n){
+      theta[h] = rnorm(1,
+                       mean = (mu + sum(Y[h,]) - sum(phi))/(k+1),
+                       sd = sqrt(sig2/(k+1))
+                       )
+    }
+    
+    #sample phi vector
+    for(j in 1:k){
+      phi[j] = rnorm(1,
+                     mean = (sum(Y[,j]) - sum(theta))/(n+4),
+                     sd = sqrt(sig2/(n+4))
+                     )
+    }
+    #save parameters
+    post_draws[["Sigma Squared"]][g] = sig2
+    post_draws[["Mu"]][g] = mu
+    post_draws[["Theta"]][g,] = theta
+    post_draws[["Phi"]][g,] = phi
+  }
+  return(post_draws)
+}
+
+start=list(
+  "mu" = mean(Y),
+  "theta" = apply(Y,1,mean)-mean(Y),
+  "phi" = apply(Y,2,mean)-mean(Y)
+)
+post_draws = GibbsANOVA(Y,start,1000)
+```
+
+####Convergence: Burn-in & Trace Plots
+
+```{r}
+plot(post_draws[["Mu"]],type="l")
+plot(post_draws[["Sigma Squared"]],type="l")
+par(mfrow=c(2,3))
+for(h in 1:n){
+  plot(post_draws[["Theta"]][,h],type="l",ylab=paste("Theta",h))
+}
+par(mfrow=c(2,2))
+for(j in 1:k){
+  plot(post_draws[["Phi"]][,j],type="l",ylab=paste("Phi",j))
+}
+```
+
+Upon examination of all of the trace plots it appears that convergence happens pretty quickly. Let's burn in 50 draws just to be conservative.
+
+####Effective Sample Size: Autocorrelation & Thinning
+```{r}
+par(mfrow=c(1,1))
+acf(post_draws[["Mu"]],main="Mu Autocorrelation")
+acf(post_draws[["Sigma Squared"]],main="Sigma Squared Autocorrelation")
+par(mfrow=c(2,3))
+for(h in 1:n){
+  acf(post_draws[["Theta"]][,h],main=paste("Theta",h,"Autocorr."))
+}
+par(mfrow=c(2,2))
+for(j in 1:k){
+  acf(post_draws[["Phi"]][,j],main=paste("Phi",j,"Autocorr."))
+}
+par(mfrow=c(1,1))
+```
+
+It appears that max autocorrelation out of the parameters is a lag of 10. So if we thin down to every tenth draw, we must draw 20,000 (after burn-in) posterior samples to achieve an effective sample size of 2000
+
+```{r}
+post_draws = GibbsANOVA(Y,start,20051)
+post_draws[["Mu"]] = post_draws[["Mu"]][seq(51,20051,10)]
+post_draws[["Sigma Squared"]] = post_draws[["Sigma Squared"]][seq(51,20051,10)]
+post_draws[["Theta"]] = post_draws[["Theta"]][seq(51,20051,10),]
+post_draws[["Phi"]] = post_draws[["Phi"]][seq(51,20051,10),]
+```
+
+##Comparing Frequentist vs. Bayesian
+
+To compare the frequentist approach (MLE), to the Bayesian approach (MAP), we find the MLE's for the $\theta_h$'s and compare them to the posterior means
+
+$$L(\theta_h)\propto \exp \bigg\{ -\frac{1}{2\sigma^2} \sum_{j=1}^k \Big(y_{hj} - (\theta_h+\phi_j)\Big)^2 \bigg\}$$
+
+Maximizing the likelihood here is the same as reducing the quadratic term (RSS) in the exponent.
+
+$$\mathrm{RSS}(\theta_h) = \sum_{j=1}^k \Big(y_{hj} - (\theta_h+\phi_j)\Big)^2 =\sum_{j=1}^k \Big(y_{hj}^2 -2\theta_h y_{hj} - 2 \phi_j y_{hj} + \theta_h^2 + 2\theta_h\phi_j+\phi_j^2\Big)$$
+$$\frac{\partial}{\partial \theta_h}\mathrm{RSS}=-2\sum_{j=1}^k y_{hj} +2\sum_{j=1}^k\phi_j+2k\theta_h=0$$
+$$\hat{\theta}_h=\frac{1}{k}\sum_{j=1}^k(\phi_j-y_{hj})$$
+$$\frac{\partial}{\partial \phi_j}\mathrm{RSS}=-2\sum_{h=1}^n y_{hj} +2\sum_{h=1}^n\theta_h+2n\phi_j=0$$
+$$\hat{\phi}_j=\frac{1}{n}\sum_{h=1}^n(\theta_h-y_{hj})$$
+$$\hat{\theta}_h=\frac{1}{k}\sum_{j=1}^k \Big( \frac{1}{n}\sum_{h=1}^n(\theta_h-y_{hj})-y_{hj} \Big)=\frac{1}{k}\sum_{j=1}^k y_{hj} + \frac{1}{n}\sum_{h=1}^n \theta_h - \frac{1}{nk} \sum_{j=1}^k\sum_{h-1}^ny_{hj} = \bar{\theta}-b_h$$
+Where $b_h = \frac{1}{k}\sum_{j=1}^k y_{hj}  - \frac{1}{nk} \sum_{j=1}^k\sum_{h-1}^ny_{hj}.$
+
+Then: $\hat{\zeta}_h = \hat{\theta}_h-\mathrm{avg}(\hat{\theta})=b_h$
+
+We plot the MLEs for $\zeta_h$ and the adjusted posterior means to compare.
+
+```{r}
+theta_Bayes = apply(post_draws[["Theta"]],2,mean)
+zeta_Bayes = theta_Bayes - mean(theta_Bayes)
+zeta_MLE = numeric(24)
+for(h in 1:24){
+  zeta_MLE[h] = 1/k*sum(Y[h,])-1/(n*k)*sum(Y)
+}
+
+plot(zeta_MLE,zeta_Bayes,xlim=c(-12,12),ylim=c(-12,12),pch=19,col="red",xlab=expression(paste(zeta,"-MLE")),ylab=expression(paste(zeta,"-Bayes")))
+abline(0,1,lty=2)
+```
+
+The estimates for the subject effects seem to be very close for the Bayesian and frequentist analysis. The Bayesian estimates are constrained to a smaller range, probably because of reduction in uncertainty due to the incorporation of the prior information.
+
+##Conclusions on List Difficulty
+
+```{r}
+par(mfrow=c(2,2))
+plot(density(post_draws[["Phi"]][,1],adjust=1.5),main="Posterior Density of Phi 1")
+plot(density(post_draws[["Phi"]][,2],adjust=1.5),main="Posterior Density of Phi 2")
+plot(density(post_draws[["Phi"]][,3],adjust=1.5),main="Posterior Density of Phi 3")
+plot(density(post_draws[["Phi"]][,4],adjust=1.5),main="Posterior Density of Phi 4")
+```
+
+The posteriors look very similar in shape and have similar supports. Let's look at the 95% credible intervals and the MAPs to really compare the effects.
+
+```{r}
+CredInt95 = matrix(NA,4,3,dimnames=list(c("Phi1","Phi2","Phi3","Phi4"),c("LB","UB","Mode")))
+#beta
+
+CredInt95[1,c(1,2)] = quantile(post_draws[["Phi"]][,1],c(.025,.975))
+dpost = density(post_draws[["Phi"]][,1])
+j = which.max(dpost$y)
+CredInt95[1,3] = dpost$x[j]
+
+CredInt95[2,c(1,2)] = quantile(post_draws[["Phi"]][,2],c(.025,.975))
+dpost = density(post_draws[["Phi"]][,2])
+j = which.max(dpost$y)
+CredInt95[2,3] = dpost$x[j]
+
+CredInt95[3,c(1,2)] = quantile(post_draws[["Phi"]][,3],c(.025,.975))
+dpost = density(post_draws[["Phi"]][,3])
+j = which.max(dpost$y)
+CredInt95[3,3] = dpost$x[j]
+
+CredInt95[4,c(1,2)] = quantile(post_draws[["Phi"]][,4],c(.025,.975))
+dpost = density(post_draws[["Phi"]][,4])
+j = which.max(dpost$y)
+CredInt95[4,3] = dpost$x[j]
+
+round(CredInt95,2)
+```
+
+```{r}
+plot(CredInt95[1:4,"Mode"],1:4,xlab="List Effect Size",ylab="List",
+     pch=19,col="red",xlim=c(-18,2),main="MAP and 95% Credible Intervals for List Effects")
+for(i in 1:4){
+  x = CredInt95[i,c(1,2)]
+  y = c(i,i)
+  lines(x,y)
+  points(CredInt95[i,c(1,2)],c(i,i),pch="I")
+}
+abline(v=0,lty=2,lwd=2,col="blue")
+```
+
+It's close, but none of the credible intervals cross zero - for each list effect there is a 95% probability that it is not zero. Furthermore, they all have point (MAP) estimates in a small range: from -5 to -12; all four credible intervals overlap. So based on our Bayesian analysis, we conclude that the lists all have very similar difficulty. 

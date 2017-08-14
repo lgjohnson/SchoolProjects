@@ -1,14 +1,41 @@
 ---
-title: "Bayesian Lasso - Predicting Ice Cream Consumption"
+title: "Bayesian Lasso and SSVC - Predicting Ice Cream Consumption"
 author: "Greg Johnson"
 output: pdf_document
 ---
+
+```{r include=FALSE}
+#libraries
+require(mvtnorm)
+require(invgamma)
+require(leaps)
+
+#data
+icecream = structure(list(IC = c(0.386, 0.374, 0.393, 0.425, 0.406, 0.344, 
+0.327, 0.288, 0.269, 0.256, 0.286, 0.298, 0.329, 0.318, 0.381, 
+0.381, 0.47, 0.443, 0.386, 0.342, 0.319, 0.307, 0.284, 0.326, 
+0.309, 0.359, 0.376, 0.416, 0.437, 0.548), price = c(0.27, 0.282, 
+0.277, 0.28, 0.272, 0.262, 0.275, 0.267, 0.265, 0.277, 0.282, 
+0.27, 0.272, 0.287, 0.277, 0.287, 0.28, 0.277, 0.277, 0.277, 
+0.292, 0.287, 0.277, 0.285, 0.282, 0.265, 0.265, 0.265, 0.268, 
+0.26), income = c(78L, 79L, 81L, 80L, 76L, 78L, 82L, 79L, 76L, 
+79L, 82L, 85L, 86L, 83L, 84L, 82L, 80L, 78L, 84L, 86L, 85L, 87L, 
+94L, 92L, 95L, 96L, 94L, 96L, 91L, 90L), temp = c(41L, 56L, 63L, 
+68L, 69L, 65L, 61L, 47L, 32L, 24L, 28L, 26L, 32L, 40L, 55L, 63L, 
+72L, 72L, 67L, 60L, 44L, 40L, 32L, 27L, 28L, 33L, 41L, 52L, 64L, 
+71L), Year = c(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 1L, 1L, 
+1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 1L, 2L, 2L, 2L, 2L, 2L, 
+2L, 2L)), .Names = c("IC", "price", "income", "temp", "Year"), class = "data.frame", row.names = c(NA, 
+-30L))
+```
+
+##Bayesian Lasso
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,warning=FALSE, message=FALSE)
 ```
 
-Consider icecream consumption predicted from price, income, temperature, and year. We will fit a Bayesian lasso so that we may drop any unnecessary explanatory variables. The model takes the form:
+Say we have the task of predicting ice cream consumption from price, income, temperature, and year. We will fit a Bayesian lasso so that we may drop any unnecessary explanatory variables. The model takes the form:
 
 $$\textbf{y}\sim \mathrm{N}(\mu\textbf{1}_n+X\boldsymbol{\beta},\sigma^2I_n)$$
 $$\boldsymbol{\beta}\overset{iid}{\sim}\mathrm{Laplace}(0,\lambda/\sigma^2)$$
@@ -227,3 +254,220 @@ plot(density(post_draws[["Lambda"]],adjust=1.5),lwd=2,main="Lambda Posterior Den
 
 
 The MAP estimate for $\lambda$ indicates that a value of 1 is most likely for regularization.
+
+
+##Stepwise Selection
+
+Bayesian lasso is just one of many methods of variable selection in modelling. We can contrast it with some other, more old-school methods like backwards and best subset selection:
+
+```{r tidy=TRUE}
+x = as.matrix(icecream[,2:5]) #predictors
+y = icecream[,1] #outcome
+n = nrow(x)
+p = ncol(x)
+
+I = diag(n) #identity matrix
+II = matrix(1, ncol =1, nrow=n) #vector of ones
+X = (I - II%*%t(II)/n)%*%x
+Y = (I - II%*%t(II)/n)%*%y
+
+
+full = lm(Y~X-1)
+round(coef(summary(full)),3)
+
+#remove income
+bmod1 = lm(Y~X[,-2]-1)
+round(coef(summary(bmod1)),3)
+
+#remove price
+bmod2 = lm(Y~X[,c(3,4)]-1)
+round(coef(summary(bmod2)),3)
+```
+
+Backwards elimination yields a 2-predictor model consisting of Temp and Year.
+
+
+```{r tidy=TRUE}
+ICdf = as.data.frame(cbind(Y,X))
+reg.model1 = regsubsets(V1 ~ ., ICdf, nvmax = 1)
+summary(reg.model1)
+reg.model2 = regsubsets(V1 ~ ., ICdf, nvmax = 2)
+summary(reg.model2)
+reg.model3 = regsubsets(V1 ~ ., ICdf, nvmax = 3)
+summary(reg.model3)
+reg.model4 = regsubsets(V1 ~ ., ICdf, nvmax = 4)
+```
+
+Performing subset selection, we find that the optimal lone predictor model includes Temp; best of two predictor models includes Temp and Year; for three predictors, Temp, Year, and Price. 
+
+##Selection by Bayes Factor
+
+We may approximate the Bayes Factors using the BICs (under a uniform prior):
+
+$$B_{ij}=\frac{p(M_i|\textbf{y})}{p(M_j|\textbf{y})} = \frac{p(\textbf{y}|M_i)}{p(\textbf{y}|M_j)}=\exp \Big\{-\frac{1}{2} \big(\mathrm{BIC}_i - \mathrm{BIC}_j \big) \Big\}$$
+
+```{r tidy=TRUE}
+BIC = summary(reg.model4)[["bic"]]
+plot(BIC,xaxt="n",xlab="",col="cornflowerblue",pch=19,cex=2,main="BIC of Forward Selection Models")
+axis(1,at=1:4,labels=paste("Model",1:4))
+BF = exp(-.5*(BIC[1:3]-BIC[4]))
+plot(BF,xaxt="n",xlab="",col="red",pch=19,cex=2,main="Bayes Factors of Forward Selection Models",ylab="Bayes Factor")
+axis(1,at=1:3,labels=c("Model 1 vs. Model 4","Model 2 vs. Model 4","Model 3 vs. Model 4"))
+
+```
+
+The 2-predictor model (Temp + Year) has the lowest Bayesian Information Criterion. The largest Bayes factor using the full model as the baseline, is also the 2-predictor model. In other words, compared to the posterior probability of the full model, the 2-predictor model has the highest posterior probability (compared to the 1- and 3-predictor models).
+
+##Stochastic Search Variable Selection
+
+One last method we'll consider is SSVS, another Bayesian method akin to the Bayesian lasso.
+
+Our priors are:
+
+$$\boldsymbol{\beta|\gamma}\sim \mathrm{N}_{p}(\boldsymbol{0},D_{\boldsymbol{\gamma}}RD_{\boldsymbol{\gamma}})$$
+
+
+$$D_{\boldsymbol{\gamma}} = \mathrm{diag}(a_1\tau_1,...,a_p\tau_p)$$
+$$\boldsymbol{\gamma}\sim \mathrm{U}(2^p)$$
+
+$$\sigma^2 | \boldsymbol{\gamma} \sim \mathrm{IG}(\upsilon_{\boldsymbol{\gamma}}/2,\upsilon_{\boldsymbol{\gamma}}\lambda_{\boldsymbol{\gamma}}/2)$$
+
+We will apply SSVS with the following parameters: $\boldsymbol{\tau} = \hat{\sigma}_{\boldsymbol{\beta}}/10, \;\;\textbf{c}=100\cdot\boldsymbol{1}_4,R=I_p, \upsilon_{\boldsymbol{\gamma}}=\upsilon = 0.$
+
+```{r tidy=TRUE}
+
+x = as.matrix(icecream[,2:5]) #predictors
+y = icecream[,1] #outcome
+p = dim(x)[2]
+n=dim(x)[1]
+I = diag(n) #identity matrix
+II = matrix(1, ncol =1, nrow=n) #vector of ones
+#SSVC assumes you don't include any predictors that would be included in every model (this means the intercept has to be integrated out)
+X = (I - II%*%t(II)/n)%*%x
+Y = (I - II%*%t(II)/n)%*%y
+
+
+#set prior parameters
+
+R = diag(p) #prior correlation matrix for beta (conditional on gamma) - taken to be identity i.e. under prior the betas are uncorrelated
+gamma.c = numeric() 
+beta.hat = solve(t(X)%*%X)%*%t(X)%*%Y #OLS/MLE of beta
+prob = rep(0.5,p)
+c = 100 #set c to 100
+tau =  sqrt(diag(solve(t(X)%*%X))%*%t(Y- X%*%beta.hat)%*%(Y- X%*%beta.hat)/n)/10 #set tau equal to SE of MLE divided by 10
+a.c = rep(c,p) #put c into vector
+sig2.c = c(t(Y- X%*%beta.hat)%*%(Y- X%*%beta.hat)/n)
+
+I = 130000 #number of MCMC iterations
+sig2 = numeric() #to collect sig2 draws
+beta = gamma = matrix(0, nrow = p, ncol = I) # to collect beta and gamma draws
+
+#begin MCMC
+for(b in 1:I){ 
+  
+  ###
+  ##### Beta's
+  ### 
+  D = diag(c(a.c*tau))
+  D.inv = solve(D)
+  A1 = t(X)%*%X/sig2.c + D.inv%*%solve(R)%*%D.inv
+  A = solve(A1)
+  beta.mean = A%*%t(X)%*%X%*%beta.hat/sig2.c
+  beta.c = rmvnorm(1, beta.mean, A)
+  beta.c = cbind(c(beta.c))
+  
+  
+  ####
+  ##### Sigma
+  ###  
+  sh = n/2
+  sc = t(abs(Y - X%*%beta.c))%*%abs(Y - X%*%beta.c)/2
+  sig2.c = rinvgamma(1, sh, sc )
+  
+  
+  ###
+  ##### gamma's
+  ### 
+  for(i in 1:p){
+    D.temp.a = D
+    D.temp.a[i,i] = c*tau[i]
+    D.temp.b = D
+    D.temp.b[i,i] = tau[i]
+    a.1 = dmvnorm(c(beta.c), rep(0,p), D.temp.a%*%R%*%D.temp.a)
+    b.1 = dmvnorm(c(beta.c), rep(0,p), D.temp.b%*%R%*%D.temp.b)
+    gamma.c[i] = rbinom(1,1,a.1/(a.1+b.1) )
+    if(gamma.c[i] == 0){a.c[i]= 1}else{a.c[i] = c}
+  }
+  
+  sig2[b] = c(sig2.c)
+  gamma[,b] = c(gamma.c)
+  beta[,b] = c(beta.c)
+} #end MCMC
+
+
+#########
+#Thinning/Burn-in and obtaining Distinct Models and their frequencies
+#########
+EF = 2000 #Effective Sample Size
+th = 60   #thinning
+B = 10000 #burn-in
+betath = gammath = matrix(0, nrow = p, ncol = EF )
+sig2th = numeric()
+model.distinct = matrix(0, ncol = p, nrow = 8) #you may need to mess around with the nrows - it is the number of distrinct models 
+M = numeric() #Frequencies of distinct models
+
+
+for(i in 1:EF){
+  betath[,i]= beta[,th*(i) +B]
+  gammath[,i]= gamma[,th*(i) +B]
+  sig2th[i]= sig2[th*(i) +B]
+
+  temp = 0
+  if(i == 1){
+    M[1] = 1
+    model.distinct[1,] = gammath[,i]}
+  
+  if(i > 1){
+  for(m in 1:length(M)){
+  if(all(gammath[,i] == model.distinct[m,])){
+      M[m] = M[m]+1}else{
+        temp = temp+1
+      }
+ 
+      if(sum(temp) == length(M)){ 
+        model.distinct[(m+1),] = gammath[,i]
+        M[(m+1)] = 1}
+    
+  }}
+
+} 
+  
+  
+
+###
+### Posterior Plots
+###
+
+par(mfrow=c(2,2))
+
+for(i in 1:p){
+  plot(density(betath[i,]), main = names(icecream)[(i+1)], xlab = "")
+}
+plot(density(sig2th), main = "Sigma2", xlab = "")
+```
+
+Based on the posterior plots of the beta vector, it appears that Temp and Year are not zero-centered, indicating that they should be included the final model; the other two predictors on the other hand, should be selected out.
+
+##Comparisons
+
+In summary, we have performed 5 different methods of model selection:
+
+1. Bayesian Lasso
+2. Backwards Selection
+3. Best Subset Selection: BIC
+4. Best Subset Selection: Bayes Factor
+5. SSVC
+
+All methods agree on the same 2-predictor model of Temp and Year. I think in this particular dataset it is very clear that the Temp and Year model is superior to all other models so it's no surprise that all of thes model selection methods converge on the same model. Consequently it is difficult to contrast them given that they give the same results. I personally like the Bayesian Lasso and SSVC - they have sound statistical theory underlying them versus stepwise and subset selection methods. Unfortunately they are also computationally expensive and I worry about how they'll scale up to datasets with thousands of predictors. The non-Bayesian lasso would probably be a good method for big-data or wide-data (p>N) situations.
+
+
