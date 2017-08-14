@@ -1,0 +1,71 @@
+---
+title: "Binomial Prediction of Hodgkin’s Survival"
+author: "Greg Johnson"
+date: "8/14/2017"
+output: pdf_document
+---
+
+```{r}
+HD<-read.csv("data/Hodgkins Data.csv")
+```
+
+Our data consist of the survival information of 342 subjects suffering from Hodgkin's. We know their white and red blood cell counts, whether they have HIV, their gender, the stage of Hodgkin's and whether they were alive after 5 years (binary outcome).
+
+##HIV as a Risk Factor
+
+To assess the impact of having previously had mono/HIV as a risk factor for death prior to five years of a Hodgkin's diagnosis, we need a model that predicts a binary outcome variable. Thus we will fit a generalized linear model with a logit function as the link i.e. a logistic regression. To assess the impact of (previously having had) mono/HIV whilst controlling for the other predictors at our disposal (e.g. gender, age, stage of Hodgkin's, etc.), we can examine the parameter estimating the unique effect of mono/HIV on the probability of dying from Hodgkin's (within 5 years) whilst holding all other predictors constant.
+
+As with any model, we need to check assumptions. Fortunately, logistic regression requires very few assumptions compared to ordinary regression. We will simply assume independence of observations and linearity of predictors and log odds but we can check for multicollinearity.
+```{r}
+cor(HD[,c(3,4,7)])
+```
+We don't have a multicollinearity problem.
+
+Lastly, since logistic regression is a generalized linear model, we don't have a clean analytic solution to the optimal parameter estimates - we need to use nonlinear estimation (i.e. MLE in this case) which requires a larger sample size. With an n= `r nrow(HD)` we will be fine.
+
+Now we can fit the logistic regression.
+
+```{r}
+log.fit<-glm(alive5yr~stage+age+rbc+gender+HIV.mono+wbc,family=binomial(link="logit"),data=HD)
+summary(log.fit)
+```
+
+The parameter estimate corresponding to the unique effect of having had HIV/mono is statistically significant, from which we can infer that the unique effect is likely not zero at the population level. We can get a nice interpretation from the parameter estimate in terms of the probability of dying from Hodgkin's within 5 years.
+
+```{r}
+1/exp(coef(log.fit)[["HIV.monoY"]])
+```
+
+We interpret the estimated HIV/mono parameter for the layperson as follows:
+
+Having had HIV/mono previously results, on average, in a `r round((1/exp(coef(log.fit)[["HIV.monoY"]])-1)*100,1)` % increase in the odds of dying from HD. This is true when we ignore gender, stage of Hodgkin's, and white and red blood cell count. Thus the data and our model identify HIV/mono as a huge risk factor for early death once someone has been diagnosed with Hodgkin's.
+
+##Stage IV vs. Stage I Hodgkin's
+
+Say we want to know how much more at risk is an individual diagnosed with stage IV Hodgkins as opposed to someone diagnosed with stage I Hodgkins.
+
+Similar to the previous problem, we can look at the estimated stage IV parameter. Because of how we coded the stage variable, the parameters or stage II, stage III, and stage IV are estimating the difference in probability of survival compare to stage I.
+
+```{r}
+1/exp(coef(log.fit)[["stageIV"]])
+```
+
+There is a 505% increase in the odds of dying from HD for someone with stage IV Hodgkins verus someone with stage I Hodgkin's. This aggrees with our intuition that the further the progression of the disease, the more likely we are to die from it (or some other complication).
+
+##Probability of 5-Year Survival
+
+Say we have a 33-year old male with a red blood cell count of 4.3 cells/ul, a white blood cell count of 12,000 cells/mm3, no history of mono and no indication of HIV has been diagnosed with stage II Hodgkins. Based on the data available to us, we can predict the probability of being alive five years from now.
+
+We can simply plug these values for the predictors into the inverse logit function to get a prediction of the probability. R has a great canned function for this:
+
+```{r}
+  pr<-predict(log.fit,newdata=data.frame(stage="II",age=33,rbc=4.3,gender="M",HIV.mono="N",wbc=12000),type="response",se=TRUE)
+
+  pr[[1]]
+```
+
+Our intuitive expanation is: on average, 33-year old males with rbc 4.3, wbc of 12000, no history of mono/HIV, and stage II Hodgkins have a probability of 50.45% of being alive with Hodgkin's within the next 5 years. Out of all people that match this description, 95% of them have a probability of being alive with Hodgkin's between:
+
+```{r}
+pr[[1]]+c(-1.96*pr[[2]],1.96*pr[[2]])
+```

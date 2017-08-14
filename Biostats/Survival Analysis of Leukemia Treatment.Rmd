@@ -1,0 +1,79 @@
+---
+title: "Survival Analysis of Leukemia Treatment"
+author: "Greg Johnson"
+date: "8/14/2017"
+output: pdf_document
+---
+
+```{r include=FALSE}
+require(lattice)
+require(nlme)
+require(reshape2)
+require(biotools)
+require(survival)
+require(GGally)
+```
+
+
+We have survival data on two types of treatment for Leukemia. We want to compare survival. In other words, we want to assess whether there is a benefit to being placed in the treatment group as opposed to the control group. There is no explicit variable for censoring but we can treat the indicator variable of death as a censoring variable (alive means censored). This will allow us to perform a proportional hazards model which allows us to compare hazard functions between people in the treatment group versus the control group after we have accounted for the effect of white blood cell count at initial diagnosis.Recall that the hazard function at time t is the probability of you dying *now* given that you've survived until this time.
+
+```{r}
+  Leuk<-read.csv("data/Leukemia.csv")
+```
+
+Before we blindly apply a model, let's look at the survival curves of the treatment group versus the control group. The curves will be unadjusted for logWBC, but the plot should give us some intuition about what our model may find.
+
+```{r}
+ggsurv(survfit(Surv(Time,Result=="Death")~Group,data=Leuk))
+```
+It looks like there is a higher probability of living longer if you're in the treatment group versus the control group. Now let's fit the model.
+
+```{r}
+  cox.Leuk<-coxph(Surv(Time,Result=="Death")~Group + logWBC,data=Leuk)
+```
+
+Let's look at some model diagnostics.
+
+```{r}
+cox.zph(cox.Leuk)
+```
+
+Our model assumption of proportional hazards is verified.
+
+```{r}
+par(mfrow=c(1,2))
+dfbeta<-residuals(cox.Leuk,type="dfbeta")
+for(j in 1:2){
+  plot(dfbeta[,j],ylab=names(coef(cox.Leuk))[j])
+  abline(h=0,lty=2)
+}
+```
+
+We have some cases that have a greater effect on the parameter estimate of the treatment effect and the parameter estimate of the wbc effect. However the magnitude of the effect is trivial when compared to the magnitude of the parameter estimates themselves. Therefore the data doesn't have any overly influential observations.
+
+```{r}
+par(mfrow=c(1,2))
+res<-residuals(cox.Leuk,type="martingale")
+X<-as.matrix(Leuk[,"logWBC"])
+plot(X,res,xlab="logWBC",ylab="residuals")
+abline(h=0,lty=2)
+lines(lowess(X,res,iter=0))
+
+b<-coef(cox.Leuk)[2]
+plot(X,b*X+res,xlab="logWBC",ylab="component+residual")
+abline(lm(b*X+res~X),lty=2)
+lines(lowess(X,b*X+res,iter=0))
+```
+
+Looks like log of white blood cell count meets our assumption of linearity. We can now safely interpret our model.
+
+```{r}
+summary(cox.Leuk)
+```
+
+If we set our alpha level at .05 - recall that this is essentially our comfort level for declaring that there is an effect of treatment - we can see that once we account for the effects of log WBC, there is a difference in hazard between the treatment group and the control group.
+
+Exponentiating our parameter for the treatment effect, our model tells us that being in the control group is associated with a 3.774-factor increase in the hazard of death. This means that being in the control group, on average, increases hazard of death by 277%! On the flip side, this is a 73.5% decrease in hazard of death, on average, if you are in the treatment.
+
+Our model has found a statistically significant effect of treatment on hazard of death in our data and the estimated effect size is large and positive. If future replication studies verify this result, this treatment will have huge benefits for Leukemia patients.
+

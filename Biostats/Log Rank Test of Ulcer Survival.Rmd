@@ -1,0 +1,65 @@
+---
+title: "Log Rank Test of Ulcer Survival"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE,warning=FALSE, message=FALSE)
+```
+
+```{r include = FALSE}
+require(MASS)
+require(ggplot2)
+require(GGally)
+require(Surv)
+require(cmprsk)
+require(etm)
+```
+
+We have survival data on 205 patients. We are interested in investigating the effects of tumor presence on survival rate.
+
+We can visualize our survival data by creating Kaplan-Meier curves for all causes of death for patients with ulcers versus those without. Further, we can perform a log-rank test to test if there are significant differences in time to mortality between the two groups.
+
+```{r}
+mel<-Melanoma
+mel[["ulcer"]]<-factor(mel[["ulcer"]],levels=0:1,labels=c("absent","present"))
+```
+
+Let's plot the Kapplan-Meier estimated survival curve using both causes of death (either melanoma or other) and stratified by presence of ulcer.
+
+```{r}
+ggsurv(survfit(Surv(time,Melanoma$status==3|Melanoma$status==1)~ulcer,data=mel))
+```
+
+Clearly there is a difference - probability of survival is dramatically lower for those with an ulcer versus those without at all time points except the first few. We would expect a statistical test to find a significant difference in time to mortality between the two groups.
+
+Let's conduct a log-rank test between the two groups.
+
+```{r}
+#when the rho argument is set to zero, this is the log-rank test.
+survdiff(Surv(time,Melanoma$status==3|Melanoma$status==1)~ulcer,data=mel,rho=0)
+```
+
+The test vindicates our suspicion - that there is a difference between the two groups. Assuming an alpha level of .05, our p-value is nowhere close to exceeding our alpha. This means that the probability of getting this effect in our data (or a more extreme effect) just by random chance is so exceedingly small that we're comfortable with saying that this isn't random chance - presence of ulcer is associated with a decreased time to mortality.
+
+
+
+Now let's take a look at the relationship between cause of death, ucler status, and survival.
+
+Now we create two cumulative incidence curves - one for those dying of melanoma and one for those dying of other causes. In each graph, we overlay a curve for patients with ulcers by one for the nonulcer patients.
+
+```{r}
+#dying of melanoma\
+require(etm)
+cif.mel<-etmCIF(Surv(time,status!=2)~ulcer,data=mel,etype=status)
+par(mfrow=c(1,2))
+plot(cif.mel,which.cif=1,ylim=c(0,.6),main="Death from Melanoma")
+plot(cif.mel,which.cif=3,ylim=c(0,.6),main="Death from Other Causes")
+```
+
+There is a clear difference in the effect of ulcers between those whoe died from Melanoma and those who died from other causes. Misappropriating the terms from ANOVA, there is a main effect for ulcer when we ignore the type of death once we account for type of death, we see an interaction effect: the effect of ulcers on time-to-death are different for those dying from melanoma and those dying from something else. There is a clear, negative effect of ulcer for those with melanoma. There is little to no effect for those who died from something else.
+
+
+
+

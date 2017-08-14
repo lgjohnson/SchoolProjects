@@ -1,0 +1,81 @@
+---
+title: "Cox Model of AIDS Treatments"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+We want to investigate the effects of Zalcitabine vs. Didanosine on prolonging life. Essentially, we want to see how the choice of drug (between the two) affects survival time. On average, does Zalcitabine predict longer survival times than Didanosine? Or is the reverse true? Or are both equivalent? Because some of the survival times are right censored (i.e. we know they lived till *at least* that time but we don't know how much longer), we will need something more specialized than a general linear model. We need some form of survival analysis to incorporate the censored data. One further consideration: we have a covariate, CD4, white blood cell count at initial observation. A covariate is a variable whose effect on survival we want to account for when comparing survival times between the two drugs. The appropriate survival analysis for multiple predictors (in our case our drug predictor and our wbc covariate) is the Cox Proportional Hazards Model. This type of survival analysis requires us to work with the hazard function, a close relative of the survival function. The hazard function is the probability of dying *now* given that you've survived up until this point. The Cox Model will let us estimate the effect of wbc and the effect of the different drugs compared to a baseline hazard.
+
+```{r include=FALSE}
+  require(survival)
+  require(GGally)
+```
+```{r}
+  aids<-read.csv("data/aids.csv")
+```  
+
+Let's visualize the data before we fit our Cox model. We'll plot the survival curves for the two drugs unadjusted for CD4 just to get some intuition for how long people are surviving for each drug.
+
+```{r message = FALSE, warning = FALSE}
+  ggsurv(survfit(Surv(Time,death)~drug,data=aids))
+```
+
+Looks like there is a slight advantage to Zalcitabine. Also, the majority of censoring happens after the t=11 mark. Let's fit our model keeping in mind that we should see see Zalcitabine outperform Didanosine in terms of hazard. There is always the possibility that when variation in hazard due to CD4 is accounted for, the left over variation in hazard doesn't show a difference between the two drugs (or, less likely, Didanosine actually outperforms Zalcitabine).
+
+```{r}
+  cox.model<-coxph(Surv(Time,death)~drug + CD4,data=aids)
+```
+
+Before we look at our model, we should run some model diagnostics to make sure our assumptions about the data necessary to run the Cox model aren't invalid.
+
+First we need to check our assumption of proportional hazards - that the hazard for an individual is porportional to the hazard of any other individual. We can test this for our drug effect, CD4, and the whole model.
+
+```{r}
+cox.zph(cox.model)
+```
+Looks like we cannot reject the null hypothesis that the hazards aren't proportional.
+
+Next we check for influential observations. We will look at df beta statistics - changes in the estimated parameters divided by their standard errors.
+
+```{r}
+par(mfrow=c(1,2))
+dfbeta<-residuals(cox.model,type="dfbeta")
+for(j in 1:2){
+  plot(dfbeta[,j],ylab=names(coef(cox.model))[j])
+  abline(h=0,lty=2)
+}
+```
+
+There are a few subjects who have a relatively large effect on the magnitude of the CD4 parameter compared to others but even these relatively large changes are small compared to the size of the CD4 parameter itself. Thus we can conclude there are no overly influential observations.
+
+Finally, let's evaluate the functional form of our model - that our predictors enter our Cox regression linearly. We can evaluate this by plotting the martingale residuals of our model against covariates, and also using them to create partial-residual plots. In our case we only need to worry about CD4 as the drug variable is dichotomous.
+
+```{r}
+par(mfrow=c(1,2))
+res<-residuals(cox.model,type="martingale")
+X<-as.matrix(aids[,"CD4"])
+plot(X,res,xlab="CD4",ylab="residuals")
+abline(h=0,lty=2)
+lines(lowess(X,res,iter=0))
+
+b<-coef(cox.model)[2]
+plot(X,b*X+res,xlab="CD4",ylab="component+residual")
+abline(lm(b*X+res~X),lty=2)
+lines(lowess(X,b*X+res,iter=0))
+```
+
+Our loess line doesn't deviate much from a straight line - looks like nonlinearity isn't much of an issue. 
+
+Now that we know our model's assumptions are satisfied, we can interpret it. Let's look at the estimated parameters of our Cox model.
+
+```{r}
+    summary(cox.model)
+```
+
+Say we take the standard $\alpha = .05,$ which is the probability at which we're comfortable rejecting the null hypothesis if the effect of drugs in our data is large enough and improbable enough (if we assume there is no effect), $p<.05.$ Under the null hypothesis that the drugs have no effect, we can see that the probability of getting the drug effect-size in our sample (or a larger effect-size) is not small enough to warrant us rejecting the null hypothesis. Put simply, once we account for the effect that CD4 has on survival time, there isn't a large enough difference in survival time between the two drugs for us to rule out the possibility that it's due to random chance - all we can say is that our sample just randomly happened to have a slight difference in survival times between the drugs.
+
+In certain areas of medical research, $\alpha$ is taken to be larger than the standard $.05$ since the cost of a false negative is much higher than the cost of a false positive e.g. we'd rather suffer an inflated chance of thinking an ineffective AIDS drug is effective than think an effective AIDS drug is ineffective - we can't let a cure for AIDS pass through our fingers! If we were to adapt a more liberal $\alpha = 0.1$ then our drug effect-size is in fact improbable enough for us to be comfortable rejecting the null hypothesis and say, "One drug is superior to the other."
+
+If we exponentiate the estimated parameter for the drug effect, we can get a nice, clean interpretation. Holding white blood cell count constant, Didanosine is associated with a 1.3024-factor increase in hazard of death compared to Zalcitabine. In other words, on average, Didanosine increases the hazard of death by 30% compared to Zalcitabine.
+
+Thus, if we were comparing the two AIDS drugs in terms of how well they prolong life, Zalcitabine is (statistically) significantly better than Didanosine.

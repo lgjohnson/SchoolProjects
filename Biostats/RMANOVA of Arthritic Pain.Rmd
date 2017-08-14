@@ -1,0 +1,96 @@
+---
+title: "RM-ANOVA of Arthritic Pain"
+author: "Greg Johnson"
+output: pdf_document
+---
+
+```{r include = FALSE}
+require(biotools)
+require(reshape2)
+```
+```{r}
+arth<-read.csv("data/Arthritis.csv")
+```
+
+We have data on a clinical trial of the effectiveness of a new medication, GN044, designed to reduce arthritic pain. 18 subjects with arthritic pain self-rated their pain over the course of a year, every 3 months. We want to investigate if there is evidence that GN044 reduces perceived pain.
+
+
+Before diving into anything, it's always a good idea to visualize the data. Let's take a look at the overall trend in arthritic pain over time and decide whether there is even a trend to investigate.
+
+Let's look at a plot of every participant's pain rating over time.
+```{r tidy=TRUE}
+y.lim<-c(0,10)
+
+matplot(c(0,3,6,9,12),t(arth[,3:7]),xlab="Months",ylab="Arthritic Pain",main="Arth. Pain over Time",type="l",lwd=rep(2,18),ylim=y.lim)
+```
+
+With 18 participants the plot is unfortunately busy to look at. Fortunately, there appears to be a common downward trend for *most* participants. The data look worthy of further investigation.
+
+As an aside, it may be interesting to investigate differential effects of the drugs according to gender. So we create the same plot as before separately for each gender.
+
+```{r tidy=TRUE}
+matplot(c(0,3,6,9,12),t(arth[1:10,3:7]),xlab="Months",ylab="Arthritic Pain",main="Males",type="l",lwd=rep(2,16),ylim=y.lim)
+
+matplot(c(0,3,6,9,12),t(arth[11:18,3:7]),xlab="Months",ylab="Arthritic Pain",main="Females",type="l",lwd=rep(2,16),ylim=y.lim)
+```
+
+It looks like a similar downward trend in arthritic pain. Interestingly, it looks like at baseline, males have more variability in arthritic pain.
+
+Before we decide on a model, we need to assume a level of measurement for our outcome variable. Conservatively, our outcome is ordinal - there is no indication that the difference between a 0 and 1 on our pain scale is the same as that between 2 and 3. However we will assume the pain rating is in fact cardinal. The pain scale obviously doesn't produce strictly cardinal data but we can assume that it's approximately cardinal and that running an analysis that assumes cardinal data won't differ significantly from one that only assumes ordinal data (if I had the time I would do a sensitivity analysis and run an ordinal model and compare results).
+
+A repeated-measures analysis is in order given the nature of the data. Given that our covariance structure has a certain structure (compound symmetry), repeated-Measures ANOVA is the simpler, obvious choice (or to be technical, a mixed-effects ANOVA if we also model the effect of gender).
+
+First we assess normality within each group defined by the factors. Fortunately ANOVA designs are robust to deviations from normality. Our next step is to assess homogeneity of covariance matrices (formed from the repeated-measures factor) between the between-subjects factor i.e. we want the covariance matrix of different times to be the same for the males and females. We can use Box's M-test (G., E., P. Box, 1949). Since Box's is highly sensitive, we use an $\alpha = .001$ (Tabachnick & Fidell, 2013).
+
+```{r}
+boxM(arth[,3:7],grouping=arth$Gender)
+```
+
+Since $p>\alpha,$ we cannot reject the null hypothesis that there is homogeneity of covariance matrices.
+
+Our last assumption is compound symmetry, a very restrictive assumption about the structure of the covariance matrices of age. It must be evaluated separately for the males and the females. We'll evaluate using Mauchly's test of sphericity.
+
+
+```{r}
+#pass sample covariance matrix of group and size of group
+Mauchly<-function(A,n){
+  #based on Mauchly (1940) and Abdi (2010)
+  #double center covariance matrix
+  A_mean<-mean(A)
+  row_mean<-rowSums(A)/nrow(A)
+  col_mean<-colSums(A)/ncol(A)
+  R<-rbind(row_mean,row_mean,row_mean,row_mean,row_mean)
+  C<-cbind(col_mean,col_mean,col_mean,col_mean,col_mean)
+  DC<-A-R-C+A_mean
+  
+  lambda<-eigen(DC)$values[c(1,2,3,4)]
+  W<-prod(lambda)/(1/4*sum(lambda))^4
+  
+  #chi-square approximate to W
+  f <- (2*(5-1)^2+5+2)/(6*(5-1)*(n-1))
+  chisq <- -(1-f)*(n-1)*log(W)
+  df <- .5*4*(4-1)
+  
+  #return p-value
+  pchisq(chisq,df,lower.tail=FALSE)
+}
+
+cov_male<-cov(arth[arth$Gender=="M",3:7])
+cov_female<-cov(arth[arth$Gender=="F",3:7])
+Mauchly(cov_male,sum(arth$Gender=="M"))
+Mauchly(cov_female,sum(arth$Gender=="F"))
+```
+
+Compound symmetry holds! It's a christmas miracle! (or the test is underpowered because of the small sample size..)
+
+```{r}
+tall<-melt(arth,id.vars=c("Participant","Gender"))
+names(tall)[c(3,4)]<-c("Time","Pain")
+output<-aov(Pain~Time*Gender+Error(Participant),data=tall)
+
+summary(output)
+```
+
+Our model reveals that there is a statistically significant change in pain over time (presumably due to the drug). In layman's terms, the probability of us getting these kinds of decreases in pain by random chance is so small that we're comfortable with saying that it must not have been due to random chance and that this arthritic medicine really does lead to decreases in arthritic pain over time.
+
+Fortunately (as a decent human being but unfortunately as a statistician who wants to practice his interpretation of model outputs) there was no effect of gender and no interaction effect (i.e. males responded to the drug the same as females over time) meaning the sexes suffer from arthritic pain equally and respond to the arthritic drug equally over time! If there are successful replications of these results with larger, more diverse samples, we can begin to take the steps to putting this drug on the market.
