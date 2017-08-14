@@ -12,4 +12,7 @@ Some projects/assignments from my MS Statistics program organized by class:
 
 All analyses were done in R and reported using Word, RMarkdown, or a Latex editor. Note that all of the R coding was done before I began to implement the tidyverse ecosystem in my work.
 
-Also includes my [SEM project](https://github.com/lgjohnson/SchoolProjects/tree/master/Structural%20Equation%20Modeling) from an SEM class for psychologists; it is written in EQS.
+Also includes an SEM class and Psychometrics/IRT class that were taken outside of my program. Projects were written in properietary languages EQS and flexMIRt, respectively. I have only provided the final reports/presentations.
+
+8. [Structural Equation Modeling](https://github.com/lgjohnson/SchoolProjects/tree/master/Structural%20Equation%20Modeling)
+9. [Item Response Theory](https://github.com/lgjohnson/SchoolProjects/tree/master/Item%20Response%20Theory)
