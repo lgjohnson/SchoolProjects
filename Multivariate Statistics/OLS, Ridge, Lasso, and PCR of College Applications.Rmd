@@ -1,0 +1,159 @@
+---
+title: "OLS, Ridge, Lasso, and PCR of College Applications"
+author: "Greg Johnson"
+date: "8/14/2017"
+output: pdf_document
+---
+
+Our data are acceptance and enrollment counts for 777 colleges and universities. We want to predict acceptances from the other variables. Because there are so many variables, we will entertain regularization/penalization methods.
+
+```{r include=FALSE}
+require(glmnet)
+college<-read.csv("data/College.csv")
+#a matrix has to be passed on to the glmnet function so the "Private" factor has to be converted to a dichotomous integer variable
+college[["Private"]]<-as.numeric(college[["Private"]]=="Yes")
+```
+
+First we designate a training set and a test set.
+
+```{r}
+set.seed(1)
+n<-nrow(college)
+ntrain<-round(.80*n) #80-20 split
+index<-sample(1:n,ntrain,replace=FALSE)
+college_train<-college[index,]
+college_test<-college[-index,]
+```
+
+##Linear Model
+
+```{r tidy=TRUE}
+fit1<-lm(paste("Apps ~",(paste(names(college_train)[-c(1,3)],collapse=" + "))),data=college_train)
+y<-college_test[["Apps"]]
+yhat<-predict(fit1,newdata=college_test[,-c(1,3)])
+MSE_lm<-mean((y-yhat)^2)
+```
+
+
+##Ridge Regression
+
+```{r tidy=TRUE}
+grid<-10^seq(10,-2,length=100) #range of possible lambdas; use cv to select an optimal lambda
+
+nfold<-10
+CVE<-numeric(length(grid)) #cross-validation error for multiple lambdas
+for(l in 1:length(grid)){
+  
+  #10-fold CV
+  folds_i<-sample(rep(1:nfold,length.out=ntrain))  
+  MSE<-numeric(nfold)
+  for(k in 1:nfold){
+    test_index<-which(folds_i==k)
+    train_fold<-college_train[-test_index,]
+    test_fold<-college_train[test_index,]
+    
+    ridge.mod<-glmnet(as.matrix(train_fold[,c(2,4:19)]),as.numeric(train_fold[,3]),alpha=0,lambda=grid[l],thresh=1e-12)
+    yhat<-predict(ridge.mod,newx=as.matrix(test_fold[,c(2,4:19)]))
+    y<-test_fold[,3]
+    MSE[k]<-mean((y-yhat)^2)
+  }
+  CVE[l]<-mean(MSE)
+}
+
+#our cross-validated lambda is:
+(lambda<-grid[which.min(CVE)])
+
+ridge.mod<-glmnet(as.matrix(college_train[,c(2,4:19)]),as.numeric(college_train[,3]),alpha=0,lambda=lambda,thresh=1e-12)
+yhat<-predict(ridge.mod,newx=as.matrix(college_test[,c(2,4:19)]))
+y<-college_test[,3]
+MSE_ridge<-mean((y-yhat)^2)
+```
+
+##Lasso
+
+
+```{r tidy=TRUE}
+nfold<-10
+CVE<-numeric(length(grid)) #cross-validation error for multiple lambdas
+for(l in 1:length(grid)){
+  
+  #10-fold CV
+  folds_i<-sample(rep(1:nfold,length.out=ntrain))  
+  MSE<-numeric(nfold)
+  for(k in 1:nfold){
+    test_index<-which(folds_i==k)
+    train_fold<-college_train[-test_index,]
+    test_fold<-college_train[test_index,]
+    
+    lasso.mod<-glmnet(as.matrix(train_fold[,c(2,4:19)]),as.numeric(train_fold[,3]),alpha=1,lambda=grid[l],thresh=1e-12)
+    yhat<-predict(lasso.mod,newx=as.matrix(test_fold[,c(2,4:19)]))
+    y<-test_fold[,3]
+    MSE[k]<-mean((y-yhat)^2)
+  }
+  CVE[l]<-mean(MSE)
+}
+
+#our cross-validated lambda is:
+(lambda<-grid[which.min(CVE)])
+
+lasso.mod<-glmnet(as.matrix(college_train[,c(2,4:19)]),as.numeric(college_train[,3]),alpha=1,lambda=lambda,thresh=1e-12)
+yhat<-predict(lasso.mod,newx=as.matrix(college_test[,c(2,4:19)]))
+y<-college_test[,3]
+MSE_lasso<-mean((y-yhat)^2)
+```
+
+##Principal Component Regression
+
+```{r}
+require(pls)
+grid<-1:16 #range of M
+nfold<-10 #number of folds
+
+CVE<-numeric(length(grid)) #cross-validation error for multiple M's
+for(l in 1:length(grid)){
+
+  #10-fold CV
+  set.seed(1)
+  folds_i<-sample(rep(1:nfold,length.out=ntrain))  
+  MSE<-numeric(nfold)
+  for(k in 1:nfold){
+    test_index<-which(folds_i==k)
+    train_fold<-college_train[-test_index,]
+    test_fold<-college_train[test_index,]
+
+    pcr.mod<-pcr(formula(paste("Apps~",(paste(names(college_train)[-c(1,3)],collapse=" + ")))),ncomp=grid[l],data=train_fold,scale=TRUE)
+    yhat<-predict(pcr.mod,ncomp=grid[l],newdata=as.matrix(test_fold[,c(2,4:19)]))
+    y<-test_fold[,3]
+    MSE[k]<-mean((y-yhat)^2)
+  }
+  CVE[l]<-mean(MSE)
+}
+
+
+
+
+
+M<-grid[which.min(CVE)]
+
+#fit principal components regression
+PCRfit<-pcr(formula(paste("Apps~",(paste(names(college_train)[-c(1,3)],collapse=" + ")))),ncomp=M,data=college_train,scale=TRUE)
+PCRfit[["loadings"]]
+#estimate test error with test set
+yhat<-predict(PCRfit,newdata=as.matrix(college_test[,c(2,4:19)]))
+y<-college_test[,3]
+MSEpcr<-mean((y-yhat)^2)
+MSEpcr
+```
+
+##Comparison of Approaches
+
+Compared to the scale of our response variable, our model MSE's are gigantic:
+
+Model         |  MSE
+--------------|---------
+Linear Model  | 1082005
+Ridge         | 1081995
+Lasso         | 1108837
+PCR           | 2442098
+
+There isn't much variation in performance with the exception of PCR. Since the Ridge model and Lasso model didn't perform much better than the linear model, it appears that shrinkage wasn't really necessary. Looking at just the correlation matrix between predictors there isn't really a multicollinearity that necessitates the shrinkage that ridge or lasso offers.
